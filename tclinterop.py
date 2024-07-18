@@ -54,7 +54,7 @@ class Interpreter:
         self.load_packages()
 
     def load_packages(self):
-        self.source("dict.tcl")
+        self.source("dict.tcl") # For older versions of TCL
 
     def _save_stdout(self):
         self.stdout = self.process.stdout.read().decode("utf-8")
@@ -99,7 +99,7 @@ class Interpreter:
                 assert code == self.CODE_CALL
                 try:
                     [fun_id, args] = body.split(" ", 1)
-                    args = [self.lindex(args, i) for i in range(self.llength(args))]
+                    args = [self.lindex(args, i) for i in range(self.list_size(args))]
                     retval = self.registered_fun[fun_id](self, *args)
                     retval = _stringify(retval)
                 except err:
@@ -115,17 +115,20 @@ class Interpreter:
     def array_exists(self, name):
         return _bool(self._eval("array exists " + _stringify(name)))
 
-    def array_get(self, name):
-        return {k : self.array_key(name, k) for k in self.array_names(name)}
+    def array_keys(self, name):
+        return list(self.array_iter_keys(name))
 
-    def array_names(self, name):
-        names = self._eval("array names " + _stringify(name))
-        return [self.lindex(names, idx) for idx in range(self.llength(names))]
+    def array_values(self, name):
+        return list(self.array_iter_values(name))
 
-    def array_set(self, name, value=dict()):
-        name = _stringify(name)
-        for k, v in value.items():
-            self.array_key(name, _stringify(k), _stringify(v))
+    def array_set(self, name, key, value):
+        return self.set(_stringify(name + "(" + _stringify(key) + ")"), _stringify(value))
+
+    def array_get(self, name, key):
+        return self.set(_stringify(name + "(" + _stringify(key) + ")"))
+
+    def array_to_dict(self, name):
+        return self._eval("array get " + _stringify(name))
 
     def array_size(self, name):
         return int(self._eval("array size " + _stringify(name)))
@@ -133,69 +136,78 @@ class Interpreter:
     def array_unset(self, name, key):
         self.eval("array unset " + _stringify(name) + " " + _stringify(str(key)))
 
-    def array_key(self, name, key, value=None):
-        key = _stringify(name + "(" + _stringify(key) + ")")
-        if value:
-            return self.set(key, _stringify(value))
+    def array_iter(self, array):
+        return self.array_iter_keys(array)
+
+    def array_iter_keys(self, array):
+        names = self._eval("array names " + _stringify(name))
+        for i in range(self.list_size(names)):
+            yield self.list_get(names, i)
+
+    def array_iter_values(self, array):
+        for key, value in self.array_iter_items(array):
+            yield value
+
+    def array_iter_items(self, array):
+        for key in self.array_iter_keys(array):
+            yield key, self.array_get(array, key)
+
+    def array_iter_values(self, array):
+        return self.dict_iter_values(self)
+
+    def array(self, array):
+        return self.dict(self.array_to_dict(array))
+
+    def cd(self, path=None):
+        if path:
+            self.eval("cd " + _stringify(path))
         else:
-            return self.set(key)
+            self.eval("cd")
 
-    def close(self, channel, mode = ""):
-        self.eval("close " + _stringify(channel) + " " + mode)
-
-    def concat(self, *values):
-        return self._eval("concat " + _stringify(values))
-
-    def dict_append(self):
-        pass
-
-    def dict_create(self, values=dict()):
-        kv = [_stringify(x) for xs in values.items() for x in xs]
-        return self._eval("dict create " + _join(kv))
-
-    def dict_exist(self, dictionary, key, *keys):
+    def dict_exist(self, dict_, key, *keys):
         keys = [_stringify(k) for k in [key] + list(keys)]
-        return self._eval("dict exists " + _stringify(dictionary) + " " + _join(keys))
+        return _bool(self._eval("dict exists " + _stringify(dict_) + " " + _join(keys)))
 
-    def dict_filter_key(self):
-        pass
+    def dict_get(self, dict_, *keys):
+        return self._eval("dict get " + _stringify(dict_) + " " + _join(keys))
 
-    def dict_filter_value(self):
-        pass
+    def dict_set(self, dict_, key, value):
+        self._eval("dict replace " + _stringify(dict_) + " " +
+                                    _stringify(key) + " " +
+                                    _stringify(value))
 
-    def dict_get(self):
-        pass
+    def dict_keys(self, dict_):
+        return list(self.dict_iter_keys(dict_))
 
-    def dict_info(self, dictionary):
-        return self._eval("dict info " + _stringify(dictionary))
+    def dict_size(self, dict_):
+        return int(self._eval("dict size " + _stringify(dict_)))
 
-    def dict_keys(self, dictionary):
-        keys = self._eval("dict keys " + _stringify(dictionary))
-        return [self.lindex(keys, idx) for idx in range(self.llength(keys))]
+    def dict_values(self, dict_):
+        return list(self.dict_iter_values(dict_))
 
-    def dict_merge(self, *dictionaries):
-        return self._eval("dict merge " + _join(list(dictionaries)))
+    def dict_iter(self, dict_):
+        return self.dict_iter_keys(dict_)
 
-    def dict_remove(self, dictionary, *keys):
-        return self._eval("dict remove " + _stringify(dictionary) + " " + _join(keys))
+    def dict_iter_values(self, dict_):
+        values = self._eval("dict values " + _stringify(dict_))
+        for i in range(self.list_size(values)):
+            yield self.list_get(values, i)
 
-    def dict_replace(self, dictionary, values=dict()):
-        kv = [_stringify(x) for xs in values.items() for x in xs]
-        return self._eval("dict replace " + _stringify(dictionary) + " " + _join(kv))
+    def dict_iter_items(self, dict_):
+        for key in self.dict_iter_keys(dict_):
+            yield key, self.dict_get(dict_, key)
 
-    def dict_set(self, name, keys, value):
-        params = [keys, value]
-        if isinstance(keys, (list, tuple)):
-            params = list(keys) + [value]
+    def dict_iter_keys(self, dict_):
+        keys = self._eval("dict keys " + _stringify(dict_))
+        for i in range(self.list_size(keys)):
+            yield self.list_get(keys, i)
 
-        return self.eval("dict set " + _join(params))
+    def dict(self, dict_):
+        return {k : v for k, v in self.dict_iter_items(dict_)}
 
-    def dict_size(self, dictionary):
-        return int(self._eval("dict size " + _stringify(dictionary)))
-
-    def dict_values(self, dictionary):
-        values = self._eval("dict values " + _stringify(dictionary))
-        return [self.lindex(values, idx) for idx in range(self.llength(values))]
+    def history(self):
+        history = self._eval("history")
+        return [line.strip().split(" ", 1)[1] for line in history.splitlines()]
 
     def info_commands(self, pattern=None):
         if pattern:
@@ -209,86 +221,85 @@ class Interpreter:
         else:
             return self.eval("info globals").split(" ")
 
-    def lindex(self, value, *indices):
-        return self._eval("lindex " + _stringify(value) + " " + _stringify(indices))
+    def info_tclversion(self):
+        return self.eval("info tclversion")
 
-    def linsert(self):
-        pass
+    @property
+    def version(self):
+        return self.info_tclversion()
 
-    def llength(self, value):
-        return int(self._eval("llength " + _stringify(value)))
+    def list_get(self, list_, *indices):
+        return self._eval("lindex " + _stringify(list_) + " " + _stringify(indices))
 
-    def lrange(self, value, first, last):
-        return self._eval("lrange " + str(first) + " " + str(last))
+    def list_set(self, list_, index, value):
+        return self._eval("lreplace " + _stringify(_list) + " " +
+                                        _stringify(index) + " " +
+                                        _stringify(index) + " " +
+                                        _stringify(value))
 
-    def lrepeat(self):
-        pass
+    def list_size(self, list_):
+        return int(self._eval("llength " + _stringify(list_)))
 
-    def lreplace(self):
-        pass
+    def list_iter(self, list_):
+        for i in range(self.list_size(list_)):
+            yield self.list_get(list_, i)
 
-    def lreverse(self):
-        pass
+    def list(self, value):
+        return list(self.list_iter(value))
 
-    def namespace_children(self):
-        pass
+    def namespace_children(self, namespace=None):
+        if namespace:
+            return self.list(self._eval("namespace children " + _stringify(namespace)))
+        else:
+            return self.list(self._eval("namespace children"))
 
     def namespace_current(self):
-        pass
+        return self._eval("namespace current")
 
-    def namespace_delete(self):
-        pass
+    def namespace_delete(self, *namespaces):
+        self.eval("namespace delete " + _join(namespaces))
 
-    def namespace_eval(self):
-        pass
+    def _namespace_eval(self, namespace, fun):
+        return self._eval("namespace eval " + fun_str)
 
-    def namespace_exists(self):
-        pass
+    def namespace_eval(self, namespace, fun, *args):
+        return self.eval("namespace eval " + _join([fun] + list(args)))
 
-    def namespace_parent(self):
-        pass
+    def namespace_exists(self, namespace):
+        return _bool(self._eval("namespace exists " + _stringify(namespace)))
 
-    def namespace_path(self):
-        pass
+    def namespace_parent(self, namespace):
+        return self._eval("namespace parent " + _stringify(namespace))
 
-    def namespace_qualifiers(self):
-        pass
+    def namespace_qualifiers(self, address):
+        return self._eval("namespace qualifiers " + _stringify(address))
 
-    def namespace_tail(self):
-        pass
+    def namespace_tail(self, address):
+        return self._eval("namespace tail " + _stringify(address))
 
-    def parray(self):
-        pass
+    def split_address(self, address):
+        return address.split("::")
 
-    def puts(self):
-        pass
+    def tail(self, address):
+        return self.split_address(address)[-1]
+
+    def qualifiers(self, address):
+        return "::".join(self.split_address(address)[:-1])
+
+    def puts(self, *values):
+        self._eval("puts " + _stringify(values))
 
     def pwd(self):
-        pass
-
-    def read(self):
-        pass
-
-    def regexp(self):
-        pass
-
-    def regsub(self):
-        pass
-
-    def split(self):
-        pass
-
-    def string(self):
-        pass
-
-    def subst(self):
-        pass
+        return self._eval("pwd")
 
     def set(self, name, value=None):
         if value:
             return self.eval("set", name, value)
         else:
             return self._eval("set " + name)
+
+    def get(self, name):
+        return self.set(name)
 
     def source(self, filename):
         self.eval("source " + filename)
@@ -298,6 +309,60 @@ class Interpreter:
             self.eval("unset -nocomplain -- " + _join(names))
         else:
             self.eval("unset " + _join(names))
+
+    @staticmethod
+    def normalize_list_index(index):
+        if index < 0:
+            return "end" + str(index + 1)
+        else:
+            return str(index)
+
+    def _get_nested_command(self, variable, indices):
+        if not isinstance(indices, (tuple, list)):
+            indices = [indices]
+        else:
+            indices = list(indices)
+
+        cmd = "set " + _stringify(variable)
+        for index in indices:
+            if isinstance(index, int):
+                cmd = "lindex [" + cmd + "] " + self.normalize_list_index(index)
+            else:
+                cmd = "dict get [" + cmd + "] " + _stringify(index)
+
+        return cmd
+
+    def get_nested(self, variable, indices):
+        return self._eval(self._get_nested_command(variable, indices))
+
+    def _set_nested_command(self, variable, indices, value, stringify=True):
+        if not isinstance(indices, (tuple, list)):
+            indices = [indices]
+        else:
+            indices = list(indices)
+
+        if stringify:
+            value = _stringify(value)
+
+        if len(indices) == 0:
+            return "set " + _stringify(variable) + " " + value
+        else:
+            get_cmd = self._get_nested_command(variable, indices[:-1])
+            index = indices[-1]
+            cmd = ''
+            if isinstance(index, int):
+                cmd = ("[lreplace [" + get_cmd + "] " + self.normalize_list_index(index) + " "
+                                                      + self.normalize_list_index(index) + " "
+                                                      + value + "]")
+            else:
+                cmd = ("[dict replace [" + get_cmd + "] " + _stringify(index) + " "
+                                                          + value + "]")
+
+            return self._set_nested_command(variable, indices[:-1], cmd, False)
+
+
+    def set_nested(self, variable, indices, value):
+        self.eval(self._set_nested_command(variable, indices, value))
 
     def get_stdout(self):
         return self.stdout
