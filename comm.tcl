@@ -1,54 +1,78 @@
-rename exit exit_
+namespace eval ::tclinterop_private_ {
 
-proc exit {{returnCode}} {
+  variable code_call   C
+  variable code_error  E
+  variable code_return R
+  variable code_close  D
+  variable code_rename N
+
+  variable sock [socket localhost [lindex $argv 0]]
+  fconfigure $sock -encoding utf-8 -buffering none
+
+
+  proc communicate {} {
+
+    variable code_call
+    variable code_error
+    variable code_return
+    variable code_close
+    variable code_rename
+    variable sock
+
+    while {1} {
+      gets $sock request
+      puts $request
+      set code [string index $request 0]
+      set body [string range $request 1 end]
+
+      if { $code == $code_call} {
+          if { [catch {set result [uplevel $body]} err] } {
+            puts stderr $err
+            puts -nonewline $sock $code_error$err
+          } else {
+            puts -nonewline $sock $code_return$result
+          }
+
+      } elseif { $code == $code_error} {
+          throw INTEROP $body
+
+      } elseif { $code == $code_return} {
+          return $body
+
+      } elseif { $code == $code_close} {
+          close $sock
+          uplevel ::tclinterop_private_::exit $body
+
+      } else {
+          set err "The python side unexpectedly returned the code $code with body $body"
+          puts -nonewline $sock $code_error$err
+          throw UNEXPECTED_CODE $err
+      }
+    }
+  }
+}
+
+
+
+rename exit ::tclinterop_private_::exit
+
+proc exit {returnCode} {
   close $::tclinterop_private_::sock
   set msg $::tclinterop_private::code_close
   append msg "The application prematurely returned with code "
   append msg $returnCode"
   puts -nonewline $::tclinterop_private_::sock $msg
-  exit_ returnCode
+  ::tclinterop_private_::exit $returnCode
 }
 
-namespace eval ::tclinterop_private_ {
+rename rename ::tclinterop_private_::rename
 
-  set code_call   C
-  set code_error  E
-  set code_return R
-  set code_close  D
-
-  set sock [socket localhost [lindex $argv 0]]
-  fconfigure $sock -encoding utf-8 -buffering none
-
-  while {1} {
-    gets $sock request
-    set code [string index $request 0]
-    set body [string range $request 1 end]
-
-    if { $code == $code_call} {
-        if { [catch {set result [uplevel #0 $body]} err] } {
-          puts stderr $err
-          puts -nonewline $sock $code_error$err
-        } else {
-          puts -nonewline $sock $code_return$result
-        }
-
-      } elseif { $code == $code_error} {
-        throw INTEROP $body
-
-      } elseif { $code == $code_return} {
-        set err "The python side unexpectedly returned the value $body"
-        puts -nonewline $sock $code_error$err
-        throw UNEXPECTED_RETURN $err
-
-      } elseif { $code == $code_close} {
-        close $sock
-        uplevel #0 exit_ $body
-
-      } else {
-        set err "The python side unexpectedly returned the code $code with body $body"
-        puts -nonewline $sock $code_error$err
-        throw UNEXPECTED_CODE $err
-      }
-    }
-  }
+proc rename {orig target} {
+  set msg $::tclinterop_private::code_rename
+  append msg [list $orig $target]
+  puts -nonewline $::tclinterop_private_::sock $msg
+  ::tclinterop_private_::rename $orig $target
 }
+
+
+exit [::tclinterop_private_::communicate]
