@@ -85,9 +85,9 @@ class Interpreter:
         self.port = self.socket.getsockname()[1]
         args = shlex.split(self.interpreter.format(port=self.port))
         self.process = Popen(args)
-                            #stderr=PIPE,
-                            #stdout=PIPE,
-                            #env=self.env)
+                             #stderr=PIPE,
+                             #stdout=PIPE,
+                             #env=self.env)
 
         atexit.register(self.exit, 0)
         self.ctrl, self.address = self.socket.accept()
@@ -102,7 +102,7 @@ class Interpreter:
     def _check_alive(self):
         poll = self.process.poll()
         if poll:
-            atexit.unregister(self.exit_)
+            atexit.unregister(self.exit)
             self.socket.close()
             self._save_stdout()
             self.process = None
@@ -296,7 +296,7 @@ class Interpreter:
                                     _stringify(value))
 
     def list_size(self, list_):
-        return self._tkinter.call("llength", _stringify(list_))
+        return self._tkinter.call("llength", list_)
 
     def list_iter(self, list_):
         for i in range(self.list_size(list_)):
@@ -304,6 +304,9 @@ class Interpreter:
 
     def list(self, value):
         return list(self.list_iter(value))
+
+    def namespace_create(self, namespace):
+        self.eval("namespace eval {} \"puts -nonewline {{}}\"".format(namespace))
 
     def namespace_children(self, namespace=None):
         if namespace:
@@ -408,8 +411,8 @@ class Interpreter:
         except:
             try:
                 if self.list_size(value) == 2:
-                    return complex(parse_num(self.list_get(value, 0)),
-                                   parse_num(self.list_get(value, 1)))
+                    return complex(self.parse_num(self.list_get(value, 0)),
+                                   self.parse_num(self.list_get(value, 1)))
                 else:
                     raise Exception("Error")
             except:
@@ -426,13 +429,13 @@ class Interpreter:
 
     def register_fun(self, name, fun):
         self.registered_fun[name] = fun
-        fun_src = f"""
-        proc {name} {{args}} {{
-            puts -nonewline $sock [concat $::tclinterop_private_::code_call {name} $args]
+        fun_src = """
+        proc {} {{args}} {{
+            puts -nonewline $sock [concat $::tclinterop_private_::code_call {} $args]
             return [::tclinterop_private::communicate]
         }}
         """
-        self.eval(fun_src)
+        self.eval(fun_src.format(name, name))
 
     def exit(self, exit_code=0):
         atexit.unregister(self.exit)
@@ -480,8 +483,16 @@ class NamespaceAccessor(Addressable):
     def __init__(self, interpreter, address = ""):
         super(NamespaceAccessor, self).__init__(interpreter, address)
 
+    def __private(self):
+        return (self.__dict__["__private_interpreter"],
+                self.__dict__["__private_address"])
+
+    def __call__(self, arg, *args):
+        (interpreter, address) = self.__private()
+        interpreter.namespace_eval(address, arg, *args)
+
     def __dir__(self):
-        interpreter = self.__private_interpreter
+        (interpreter, _) = self.__private()
         addresses = (_children_addresses(self) +
                      _function_addresses(self) +
                      _variable_addresses(self))
@@ -489,41 +500,45 @@ class NamespaceAccessor(Addressable):
         return [interpreter.tail(address) for address in addresses]
 
     def __getitem__(self, name):
-        address = self.__private_address + "::" + _stringify(name)
-        interpreter = self.__private_interpreter
+        (interpreter, ns_address) = self.__private()
+        address = ns_address + "::" + _stringify(name)
 
-        if interpreter_.namespace_exists(address):
+        if interpreter.namespace_exists(address):
             return NamespaceAccessor(interpreter, address)
 
-        elif interpreter_.function_exists(address):
+        elif interpreter.function_exists(address):
             return FunctionAccessor(interpreter, address)
 
-        elif interpreter_.array_exists(address):
+        elif interpreter.array_exists(address):
             return ArrayAccessor(interpreter, address)
 
-        elif interpreter_.variable_exists(address):
+        elif interpreter.variable_exists(address):
             return StringAccessor(interpreter, address)
 
         else:
             raise NameError(("name '{}' is not defined " +
                              "in Tcl namespace {}").format(name,
-                                                           self.__private_address))
+                                                           ns_address))
 
     def __setitem__(self, name, value):
+        (interpreter, ns_address) = self.__private()
         name = _stringify(name)
-        address = self.__private_address + "::" + _stringify(name)
-        interpreter = self.__private_interpreter
+        address = ns_address + "::" + _stringify(name)
+        interpreter = interpreter
 
         if isinstance(value, Namespace):
             _del_nothrow(self, name)
             interpreter.namespace_create(address)
-            ns = self[address_]
-            for key, val in value:
+            ns = self[name]
+            for key, val in value.items():
                 ns[key] = val
 
         elif isinstance(value, Array):
             _del_nothrow(self, name)
-            interpreter_.array_create(address, value)
+            interpreter.array_create(address, value)
+            arr = self[name]
+            for key, val in value.items():
+                arr[key] = val
 
         elif callable(value):
             _del_nothrow(self, name)
@@ -532,17 +547,17 @@ class NamespaceAccessor(Addressable):
         elif isinstance(value, VariableAccessor):
             value = value.get()
             _del_nothrow(self, name)
-            interpreter_.set(address, value)
+            interpreter.set(address, value)
 
         else:
-            value = _stringify(value)
             _del_nothrow(self, name)
-            interpreter_.set(address, value)
+            interpreter.set(address, value)
 
 
     def __delitem__(self, name):
-        address = self.__private_address + "::" + _stringify(name)
-        interpreter = self.__private_interpreter
+        (interpreter, ns_address) = self.__private()
+        address = ns_address + "::" + _stringify(name)
+        interpreter = self.interpreter
 
         if interpreter.namespace_exists(address):
             interpreter.namespace_delete(address)
@@ -561,7 +576,7 @@ class NamespaceAccessor(Addressable):
         else:
             raise NameError(("name '{}' is not defined " +
                              "in Tcl namespace '{}'").format(name,
-                                                             self.__private_address))
+                                                             ns_address))
 
     def __getattr__(self, name):
         return self[name]
@@ -577,23 +592,19 @@ class NamespaceAccessor(Addressable):
 
 
 def parent(ns):
-    address = ns.__dict__["__private_address"]
-    interpreter = ns.__dict__["__private_interpreter"]
+    (interpreter, address) = self.__private()
     return interpreter.qualifiers(address)
 
 def children(ns):
-    address = ns.__dict__["__private_address"]
-    interpreter = ns.__dict__["__private_interpreter"]
+    (interpreter, address) = self.__private()
     return [NamespaceAccessor(interpreter, address) for child in _children_addresses(ns)]
 
 def functions(ns):
-    address = ns.__dict__["__private_address"]
-    interpreter = ns.__dict__["__private_interpreter"]
+    (interpreter, address) = self.__private()
     return [FunctionAccessor(interpreter, address) for fun in _function_addresses(ns)]
 
 def variables(ns):
-    address = ns.__dict__["__private_address"]
-    interpreter = ns.__dict__["__private_interpreter"]
+    (interpreter, address) = self.__private()
     vars = []
     for var in _variable_addresses(ns):
         if interpreter.array_exists(address):
@@ -603,26 +614,35 @@ def variables(ns):
 
     return vars
 
-class PublicAttributes:
+class PublicProperties(Addressable):
+    def __init__(self, interpreter, address = ""):
+        super(PublicProperties, self).__init__(interpreter, address)
+
     @property
     def interpreter(self):
-        return interpreter(self)
+        return self.__dict__["__private_interpreter"]
 
     @property
     def address(self):
-        return address(self)
+        return self.__dict__["__private_address"]
 
     @property
     def name(self):
-        return interpreter(self)
+        return self.interpreter.tail(self.address)
 
     @property
     def namespace(self):
-        return namespace(self)
+        return Namespace(self.interpreter,
+                         self.interpreter.qualifiers(self.address))
 
-class FunctionAccessor(Addressable, PublicAttributes):
+
+
+class FunctionAccessor(PublicProperties):
+    def __init__(self, interpreter, address = ""):
+        super(FunctionAccessor, self).__init__(interpreter, address)
+
     def __call__(self, *args):
-        return self.interpreter.eval(self.address() + " " + _join(args))
+        return self.interpreter.eval(self.address + " " + _join(args))
 
 def _get_val(val):
     if isinstance(val, VariableAccessor):
@@ -631,9 +651,9 @@ def _get_val(val):
         return val
 
 
-class VariableAccessor(Addressable, PublicAttributes):
+class VariableAccessor(PublicProperties):
     def __init__(self, interpreter, address, rw_functions=None):
-        Addressable.__init__(self, interpreter, address)
+        super(VariableAccessor, self).__init__(interpreter, address)
         if rw_functions:
             self.rw_functions = rw_functions
         else:
@@ -643,22 +663,42 @@ class VariableAccessor(Addressable, PublicAttributes):
         self.get()
 
     def __str__(self):
-        return self.get_str()
+        return str(self.get())
 
     def __repr__(self):
-        return self.get_str()
+        return repr(self.get())
 
+    @property
     def dict(self):
         return DictionaryAccessor(self.interpreter, self.address, self.rw_functions)
 
+    @dict.setter
+    def dict(self, value):
+        self.set(dict(value))
+
+    @property
     def list(self):
         return ListAccessor(self.interpreter, self.address, self.rw_functions)
 
+    @list.setter
+    def list(self, value):
+        self.set(list(value))
+
+    @property
     def str(self):
         return StringAccessor(self.interpreter, self.address, self.rw_functions)
 
+    @str.setter
+    def str(self, value):
+        self.set(str(value))
+
+    @property
     def num(self):
         return NumericAccessor(self.interpreter, self.address, self.rw_functions)
+
+    @num.setter
+    def num(self, value):
+        self.set(self.interpreter.parse_num(str(value)))
 
     def _parse_num(self):
         return interpreter.parse_num(self.get())
@@ -667,17 +707,40 @@ class VariableAccessor(Addressable, PublicAttributes):
     def int(self):
         return int(self._parse_num())
 
+    @int.setter
+    def int(self, value):
+        self.set(int(value))
+
     @property
     def float(self):
         return float(self._parse_num())
+
+    @float.setter
+    def float(self, value):
+        self.set(float(value))
 
     @property
     def bool(self):
         return bool(self._parse_num())
 
+    @bool.setter
+    def bool(self, value):
+        self.set(int(bool(value)))
+
     @property
     def complex(self):
         return complex(self._parse_num())
+
+    @complex.setter
+    def complex(self, value):
+        self.set(complex(value))
+
+    def __setattr__(self, name, value):
+        if (isinstance(value, VariableAccessor) and
+            name in ["num", "str", "list", "dict"]):
+            self.set(value.get())
+        else:
+            super(VariableAccessor, self).__setattr__(name, value)
 
     def __bool__(self):
         return self.bool
@@ -692,10 +755,10 @@ class VariableAccessor(Addressable, PublicAttributes):
         return self.complex
 
     def _get(self):
-        return interpreter._eval(self.rw_functions[0])
+        return self.interpreter._eval(self.rw_functions[0])
 
     def _set(self, value):
-        return interpreter.eval(self.rw_functions[1].format(_stringify(value)))
+        return self.interpreter.eval(self.rw_functions[1].format(_stringify(value)))
 
     def get(self):
         return self._get()
@@ -704,7 +767,17 @@ class VariableAccessor(Addressable, PublicAttributes):
         self._set(value)
 
 
-class StringAccessor(VariableAccessor, UserString):
+class StringAccessor(UserString, VariableAccessor):
+    def __new__(cls, p1, p2=None, p3=None):
+        if p2 == None:
+            return str(p1)
+        else:
+            return super().__new__(cls)
+
+
+    def __init__(self, interpreter, address, rw_functions=None):
+        self.accessor = VariableAccessor(interpreter, address, rw_functions)
+
     @property
     def data(self):
         return self.get()
@@ -712,6 +785,24 @@ class StringAccessor(VariableAccessor, UserString):
     @data.setter
     def data(self, value):
         self.set(value)
+
+    @property
+    def interpreter(self):
+        return self.accessor.interpreter
+
+    @property
+    def address(self):
+        return self.accessor.address
+
+    @property
+    def rw_functions(self):
+        return self.accessor.rw_functions
+
+    def _set(self, value):
+        self.accessor._set(value)
+
+    def _get(self):
+        return self.accessor._get()
 
 class ListAccessor(VariableAccessor, MutableSequence):
     def _extend_rw(self, indices):
@@ -724,9 +815,9 @@ class ListAccessor(VariableAccessor, MutableSequence):
 
         (r_fun, w_fun) = self.rw_functions
         for index in indices:
-            w_fun = w_fun.format("[lreplace [{}] {} {}]".format(r_fun,
-                                                                index,
-                                                                index))
+            w_fun = w_fun.format("[lreplace [{}] {} {} {{}}]".format(r_fun,
+                                                                     index,
+                                                                     index))
             r_fun = "lindex [{}] {}".format(r_fun, index)
 
         return (r_fun, w_fun)
@@ -738,7 +829,7 @@ class ListAccessor(VariableAccessor, MutableSequence):
 
     def __setitem__(self, index, value):
         (_, w_fun) = self._extend_rw(index)
-        self.eval(w_fun.format(_stringify(value)))
+        self.interpreter.eval(w_fun.format(_stringify(value)))
 
     def __delitem__(self, index):
         (r_fun, w_fun) = self.rw_functions
@@ -746,7 +837,7 @@ class ListAccessor(VariableAccessor, MutableSequence):
             (r_fun, w_fun) = self._extend_rw(index[:-1])
             index = index[-1]
 
-        fun = w_fun.format("[lremove [{}] {}]".format(r_fun, index))
+        fun = w_fun.format("[lreplace [{}] {} {}]".format(r_fun, index, index))
         self.interpreter.eval(fun)
 
     def insert(self, index, value):
@@ -773,11 +864,11 @@ class DictionaryAccessor(VariableAccessor, MutableMapping):
             indices = [indices]
 
         (r_fun, w_fun) = self.rw_functions
+        for index in indices:
+            w_fun = w_fun.format("[dict replace [{}] {} {{}}]".format(r_fun,
+                                                                     index))
+            r_fun = "dict get [{}] {}".format(r_fun, index)
 
-        w_fun = w_fun.format("[dict set [{}] {}]".format(r_fun,
-                                                         _join(indices)))
-
-        r_fun = "dict get [{}] {}".format(r_fun, _join(indices))
         return (r_fun, w_fun)
 
 
@@ -788,7 +879,7 @@ class DictionaryAccessor(VariableAccessor, MutableMapping):
 
     def __setitem__(self, index, value):
         (_, w_fun) = self._extend_rw(index)
-        self.eval(w_fun.format(_stringify(value)))
+        self.interpreter.eval(w_fun.format(_stringify(value)))
 
     def __delitem__(self, index):
         (r_fun, w_fun) = self.rw_functions
@@ -812,7 +903,7 @@ class DictionaryAccessor(VariableAccessor, MutableMapping):
         self._set(dict(value))
 
 
-class ArrayAccessor(Addressable, MutableMapping):
+class ArrayAccessor(PublicProperties, MutableMapping):
     def __getitem__(self, index):
         return StringAccessor(self.interpreter, "{}({})".format(self.address,
                                                                 index))
@@ -842,12 +933,12 @@ class ArrayAccessor(Addressable, MutableMapping):
 class NumericAccessor(VariableAccessor):
     def _get_num(self, value):
         if isinstance(value, VariableAccessor):
-            return self._parse_num(value._get())
+            return self.interpreter.parse_num(value._get())
         else:
             return value
 
-    def get(self, value):
-        return self._parse_num(self._get())
+    def get(self):
+        return self.interpreter.parse_num(self._get())
 
     def __add__(self, other):
         return self.get() + self._get_num(other)
@@ -929,39 +1020,51 @@ class NumericAccessor(VariableAccessor):
 
     def __iadd__(self, other):
         self.set(self + other)
+        return self
 
     def __isub__(self, other):
         self.set(self - other)
+        return self
 
     def __imul__(self, other):
         self.set(self * other)
+        return self
 
     def __itruediv__(self, other):
         self.set(self / other)
+        return self
 
     def __ifloordiv__(self, other):
         self.set(self // other)
+        return self
 
     def __imod__(self, other):
         self.set(self % other)
+        return self
 
     def __ipow__(self, other, modulo=None):
         self.set(self ** other)
+        return self
 
     def __ilshift__(self, other):
         self.set(self << other)
+        return self
 
     def __irshift__(self, other):
         self.set(self >> other)
+        return self
 
     def __iand__(self, other):
         self.set(self and other)
+        return self
 
     def __ixor__(self, other):
         self.set(self ^ other)
+        return self
 
     def __ior__(self, other):
         self.set(self or other)
+        return self
 
     def __neg__(self):
         return -self.get()
