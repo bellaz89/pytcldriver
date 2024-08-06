@@ -34,7 +34,7 @@ namespace eval ::tclinterop_private_ {
           }
 
       } elseif { $code == $code_error} {
-          throw INTEROP $body
+          error $body
 
       } elseif { $code == $code_return} {
           return $body
@@ -46,7 +46,7 @@ namespace eval ::tclinterop_private_ {
       } else {
           set err "The python side unexpectedly returned the code $code with body $body"
           puts -nonewline $sock $code_error$err
-          throw UNEXPECTED_CODE $err
+          error $err
       }
     }
   }
@@ -68,9 +68,10 @@ proc exit {returnCode} {
 rename rename ::tclinterop_private_::rename
 
 proc rename {orig target} {
-  set msg $::tclinterop_private::code_rename
+  puts "Hello"
+  set msg $::tclinterop_private_::code_rename
   append msg [list $orig $target]
-  puts -nonewline $::tclinterop_private_::sock $msg
+  puts -nonewline $::tclinterop_private_::sock$msg
   ::tclinterop_private_::rename $orig $target
 }
 

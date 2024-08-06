@@ -58,6 +58,7 @@ class Interpreter:
     CODE_ERROR="E"
     CODE_RETURN="R"
     CODE_CLOSE="D"
+    CODE_RENAME="N"
 
     def __init__(self,
                  interpreter="tclsh comm.tcl {port}",
@@ -120,6 +121,7 @@ class Interpreter:
             data = self.ctrl.recv(self.MAX_MSG_SIZE).decode("utf-8")
             code = data[0]
             body = data[1:]
+            print(code)
 
             if code == self.CODE_RETURN:
                 return body
@@ -134,14 +136,21 @@ class Interpreter:
             elif code == self.CODE_ERROR:
                 raise RuntimeError("While executing .eval(\"" + fun + "\"):\n" + body)
 
+            elif code == self.CODE_RENAME:
+                [old, new] = body.split(" ", 1)
+                if old in self.registered_fun:
+                    fun = self.registered_fun
+                    del registered_fun[old]
+                    registered_fun[new] = fun
+
             else:
                 assert code == self.CODE_CALL
                 try:
-                    [fun_id, args] = body.split(" ", 1)
-                    args = [self.lindex(args, i) for i in range(self.list_size(args))]
-                    retval = self.registered_fun[fun_id](self, *args)
+                    [fun_id, args] = body[1:].split(" ", 1)
+                    args = [self.list_get(args, i) for i in range(self.list_size(args))]
+                    retval = self.registered_fun[fun_id](*args)
                     retval = _stringify(retval)
-                except err:
+                except Exception as err:
                     self.ctrl.send((self.CODE_ERROR + str(err) + "\n").encode())
                 else:
                     self.ctrl.send((self.CODE_RETURN + retval + "\n").encode())
@@ -429,13 +438,13 @@ class Interpreter:
 
     def register_fun(self, name, fun):
         self.registered_fun[name] = fun
-        fun_src = """
-        proc {} {{args}} {{
-            puts -nonewline $sock [concat $::tclinterop_private_::code_call {} $args]
-            return [::tclinterop_private::communicate]
-        }}
-        """
-        self.eval(fun_src.format(name, name))
+        fun_src = "proc {} {{args}} {{" \
+        "    set sock $::tclinterop_private_::sock;" \
+        "    set fname [lindex [info level 0] 0];" \
+        "    puts -nonewline $sock [concat $::tclinterop_private_::code_call $fname $args];" \
+        "    return [::tclinterop_private_::communicate]" \
+        "}}"
+        self.eval(fun_src.format(name))
 
     def exit(self, exit_code=0):
         atexit.unregister(self.exit)
@@ -904,15 +913,21 @@ class DictionaryAccessor(VariableAccessor, MutableMapping):
 
 
 class ArrayAccessor(PublicProperties, MutableMapping):
+    def __str__(self):
+        return str(self.get())
+
+    def __repr__(self):
+        return repr(self.get())
+
     def __getitem__(self, index):
         return StringAccessor(self.interpreter, "{}({})".format(self.address,
                                                                 index))
 
     def __setitem__(self, index, value):
-        self.interpreter.array_set(value)
+        self.interpreter.array_set(self.address, index, value)
 
     def __delitem__(self, index):
-        self.interpreter.array_unset(index)
+        self.interpreter.array_unset(self.address, index)
 
     def __len__(self):
         return len(self.get())
