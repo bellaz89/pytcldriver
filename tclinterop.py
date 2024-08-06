@@ -85,10 +85,10 @@ class Interpreter:
 
         self.port = self.socket.getsockname()[1]
         args = shlex.split(self.interpreter.format(port=self.port))
-        self.process = Popen(args)
-                             #stderr=PIPE,
-                             #stdout=PIPE,
-                             #env=self.env)
+        self.process = Popen(args,
+                             stderr=PIPE,
+                             stdout=PIPE,
+                             env=self.env)
 
         atexit.register(self.exit, 0)
         self.ctrl, self.address = self.socket.accept()
@@ -121,7 +121,6 @@ class Interpreter:
             data = self.ctrl.recv(self.MAX_MSG_SIZE).decode("utf-8")
             code = data[0]
             body = data[1:]
-            print(code)
 
             if code == self.CODE_RETURN:
                 return body
