@@ -22,14 +22,14 @@ class Interpreter:
     CODE_RENAME="N"
 
     def __init__(self,
-                 interpreter="tclsh comm.tcl {port}",
+                 command="tclsh comm.tcl {tcl_args}",
                  env=None):
 
         self.command_list = []
         self.env = env
         self.stdout = None
         self.stderr = None
-        self.interpreter = interpreter
+        self.command = command
         self.process = None
         self.registered_fun = dict()
 
@@ -43,7 +43,7 @@ class Interpreter:
         self.socket.listen(1)
 
         self.port = self.socket.getsockname()[1]
-        args = shlex.split(self.interpreter.format(port=self.port))
+        args = shlex.split(self.command.format(port=self.port))
         self.process = Popen(args,
                              stderr=PIPE,
                              stdout=PIPE,
@@ -66,12 +66,12 @@ class Interpreter:
             self.socket.close()
             self._save_stdout()
             self.process = None
-            err = "The interpreter prematurely exited with code " + str(poll)
+            err = "The command prematurely exited with code " + str(poll)
             raise RuntimeError(err)
 
     def _eval(self, fun):
         if self.is_running() is False:
-            err = "Call .open() before interacting with the interpreter"
+            err = "Call .open() before interacting with the command"
             raise RuntimeError(err)
 
         self._check_alive()

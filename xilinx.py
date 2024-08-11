@@ -30,7 +30,7 @@ class Xilinx(Interpreter):
 
 class Vivado(Xilinx):
     def local_bin(self):
-        return "bin/vivado -mode batch -source comm.tcl -tclargs {port}"
+        return "bin/vivado -mode batch -source comm.tcl -tclargs {tcl_args}"
 
     def find_program_dir(self):
         return Path(shutil.which("vivado")).parents[1]
@@ -38,7 +38,7 @@ class Vivado(Xilinx):
 
 class Vitis(Xilinx):
     def local_bin(self):
-        return "bin/xsct comm.tcl {port}"
+        return "bin/xsct comm.tcl {tcl_args}"
 
     def find_program_dir(self):
         return Path(shutil.which("vitis")).parents[1]
@@ -46,7 +46,7 @@ class Vitis(Xilinx):
 
 class ISE(Xilinx):
     def local_bin(self):
-        return "ISE/bin/lin64/xtclsh comm.tcl {port}"
+        return "ISE/bin/lin64/xtclsh comm.tcl {tcl_args}"
 
     def find_program_dir(self):
         return Path(shutil.which("ise")).parents[3]
@@ -54,7 +54,7 @@ class ISE(Xilinx):
 
 class PlanAhead(Xilinx):
     def local_bin(self):
-        return "PlanAhead/bin/planAhead -mode batch -source comm.tcl -tclargs {port}"
+        return "PlanAhead/bin/planAhead -mode batch -source comm.tcl -tclargs {tcl_args}"
 
     def find_program_dir(self):
         return Path(shutil.which("planAhead")).parents[2]
