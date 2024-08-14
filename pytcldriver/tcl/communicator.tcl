@@ -9,6 +9,13 @@ variable comm_stack 0
 set script_dir [file dirname $::argv0]
 source [file join $script_dir dict.tcl]
 
+if {[catch {package require base64} err]} {
+  set dir [file join $script_dir base64]
+  source [file join $dir pkgIndex.tcl]
+  package require base64
+  unset dir
+}
+
 unset script_dir
 
 proc init {params} {
@@ -60,10 +67,12 @@ proc receive {} {
 
 proc encrypt {data} {
   set data [encoding convertto utf-8 $data]
+  set data [::base64::encode -wrapchar "" $data]
   return $data
 }
 
 proc decrypt {data} {
+  set data [::base64::decode $data]
   set data [encoding convertfrom utf-8 $data]
   return $data
 }

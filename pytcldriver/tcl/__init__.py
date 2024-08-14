@@ -8,20 +8,24 @@ TEMPFILE_DIRECTORY = tempfile.TemporaryDirectory(prefix="pytcldriver.")
 atexit.register(TEMPFILE_DIRECTORY.cleanup)
 
 TCL_SOURCES_DIRECTORY = TEMPFILE_DIRECTORY.name
+TCL_SOURCES_BASE64_DIRECTORY = os.path.join(TCL_SOURCES_DIRECTORY, "base64")
+
+os.mkdir(TCL_SOURCES_BASE64_DIRECTORY)
 
 RESOURCE_PATH = files("pytcldriver.tcl")
 RESOURCE_MAIN = RESOURCE_PATH.joinpath("main.tcl")
 RESOURCE_COMM = RESOURCE_PATH.joinpath("communicator.tcl")
 RESOURCE_DICT = RESOURCE_PATH.joinpath("dict.tcl")
 
-with open(os.path.join(TCL_SOURCES_DIRECTORY, "main.tcl"), "w") as f:
-    f.write(RESOURCE_MAIN.read_text())
+for name in ["main.tcl", "communicator.tcl", "dict.tcl"]:
+    with open(os.path.join(TCL_SOURCES_DIRECTORY, name), "w") as f:
+        f.write(RESOURCE_PATH.joinpath(name).read_text())
 
-with open(os.path.join(TCL_SOURCES_DIRECTORY, "communicator.tcl"), "w") as f:
-    f.write(RESOURCE_COMM.read_text())
+RESOURCE_BASE64_PATH = files("pytcldriver.tcl.base64")
 
-with open(os.path.join(TCL_SOURCES_DIRECTORY, "dict.tcl"), "w") as f:
-    f.write(RESOURCE_DICT.read_text())
+for name in ["pkgIndex.tcl", "base64.tcl", "base64c.tcl"]:
+    with open(os.path.join(TCL_SOURCES_BASE64_DIRECTORY, name), "w") as f:
+        f.write(RESOURCE_BASE64_PATH.joinpath(name).read_text())
 
 TCL_MAIN_PATH = os.path.join(TCL_SOURCES_DIRECTORY, "main.tcl")
 TCL_COMM_PATH = os.path.join(TCL_SOURCES_DIRECTORY, "communicator.tcl")

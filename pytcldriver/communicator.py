@@ -1,7 +1,6 @@
 import socket
-import struct
 from subprocess import Popen, PIPE
-import binascii
+from base64 import b64encode, b64decode
 import atexit
 import shlex
 from .tcl import TCL_MAIN_PATH
@@ -87,10 +86,14 @@ class Communicator(object):
         return self.decrypt(data)
 
     def encrypt(self, message):
-        return message.encode()
+        data = message.encode()
+        data = b64encode(data)
+        return data
 
     def decrypt(self, data):
-        return data.decode("utf-8")
+        data = b64decode(data)
+        data = data.decode("utf-8")
+        return data
 
     def check_alive(self):
         return self.process.poll()

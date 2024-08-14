@@ -27,7 +27,7 @@ license = {file = "LICENSE.txt"}
 include-package-data = true
 
 [tool.setuptools.package-data]
-pytcldriver = ["*.tcl", "*.pcx"]
+pytcldriver = ["*.tcl"]
 
 [project.urls]
 # Homepage = ""
