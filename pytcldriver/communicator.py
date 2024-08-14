@@ -1,9 +1,6 @@
 import socket
 import struct
 from subprocess import Popen, PIPE
-from Crypto.Cipher import AES
-from Crypto.Random import get_random_bytes
-from Crypto.Hash import MD5
 import binascii
 import atexit
 import shlex
@@ -11,14 +8,10 @@ from .tcl import TCL_MAIN_PATH
 
 RANDOM_SIZE=16
 PACKET_SIZE=1024
-LEN_SIZE=8
-LEN_MD5=16
 POPEN_CLOSE_TIMEOUT=5.0
 
 class Communicator(object):
-    def __init__(self, command, env=None,
-                 redirect_stdout=False, encrypt_data=False,
-                 port=None):
+    def __init__(self, command, env=None, redirect_stdout=False, port=None):
 
         self.fragment = bytes()
         self.process = None
@@ -26,15 +19,10 @@ class Communicator(object):
         self.stderr = ""
         self.socket = None
 
-        if encrypt_data:
-            self.aes_key = get_random_bytes(RANDOM_SIZE)
-
         self.command = command
         self.env = env
         self.redirect_stdout = redirect_stdout
-        self.encrypt_data = encrypt_data
         self.port = port
-
 
     def open(self):
         atexit.register(self.close)
@@ -61,12 +49,6 @@ class Communicator(object):
         self.socket.listen(1)
         port = self.socket.getsockname()[1]
         tcl_args = str(port)
-
-        if self.encrypt_data:
-            tcl_seed = get_random_bytes(RANDOM_SIZE)
-            tcl_args += " " + binascii.hexlify(aes_key)
-            tcl_args += " " + binascii.hexlify(tcl_seed)
-
         args = shlex.split(self.command.format(script=TCL_MAIN_PATH,
                                                tcl_args=tcl_args))
 
@@ -83,15 +65,13 @@ class Communicator(object):
 
     def send(self, message):
         data = self.encrypt(message)
-        data_md5 = MD5.new(data).digest()
         data_len = len(data)
-        data_len = data_len.to_bytes(LEN_SIZE, "big")
+        data_len = "%16x" % data_len
+        data_len = data_len.encode("utf-8")
         self.ctrl.send(data_len)
-        self.ctrl.send(data_md5)
         self.ctrl.send(data)
 
     def receive_bytes(self, num):
-
         while len(self.fragment) < num:
             self.fragment += self.ctrl.recv(PACKET_SIZE)
 
@@ -100,39 +80,16 @@ class Communicator(object):
         return data
 
     def receive(self):
-        data_len = self.receive_bytes(LEN_SIZE)
-        data_len = int.from_bytes(data_len, "big")
-        data_md5 = self.receive_bytes(LEN_MD5)
+        data_len = self.receive_bytes(16)
+        data_len = data_len.decode("utf-8")
+        data_len = int(data_len, 16)
         data = self.receive_bytes(data_len)
-
-        if MD5.new(data).digest() != data_md5:
-            raise RuntimeError("Received hash does not match the computed one")
-
         return self.decrypt(data)
 
     def encrypt(self, message):
-        data = message.encode()
-        if self.encrypt_data:
-            iv = get_random_bytes(RANDOM_SIZE)
-            cipher = AES.new(self.aes_key, AES.MODE_CBC, iv)
-            pad = cipher.block_size - (len(data) % cipher.block_size)
-
-            if pad == 0:
-                pad = cipher.block_size
-
-            data += pad.to_bytes(1, "big") * pad
-            return iv + cipher.encrypt(data)
-        else:
-            return data
+        return message.encode()
 
     def decrypt(self, data):
-        if self.encrypt_data:
-            iv = data[:RANDOM_SIZE]
-            cipher = AES.new(self.aes_key, AES.MODE_CBC, iv)
-            data = data[RANDOM_SIZE:]
-            data = cipher.decrypt(data)
-            data = data[:-data[-1]]
-
         return data.decode("utf-8")
 
     def check_alive(self):
@@ -151,8 +108,6 @@ class Communicator(object):
         except:
             pass
 
-        self.process = None
-
         try:
             self.socket.close()
         except:
@@ -166,5 +121,7 @@ class Communicator(object):
         else:
             self.stdout = ""
             self.stderr = ""
+
+        self.process = None
 
         atexit.unregister(self.close)

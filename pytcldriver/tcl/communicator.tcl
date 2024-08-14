@@ -8,34 +8,11 @@ variable comm_stack 0
 
 set script_dir [file dirname $::argv0]
 source [file join $script_dir dict.tcl]
-source [file join $script_dir mt19937.tcl]
-
-if {[catch {package require aes}]} {
-  set dir [file join $script_dir aes]
-  source [file join $script_dir aes/pkgIndex.tcl]
-  package require aes
-  unset dir
-}
-
-if {[catch {package require md5}]} {
-  set dir [file join $script_dir md5]
-  source [file join $script_dir md5/pkgIndex.tcl]
-  package require md5
-  unset dir
-}
 
 unset script_dir
 
 proc init {params} {
   variable socket_port [lindex $params 0]
-  if {[llength $params] > 1} {
-     variable aes_key [binary format H* [lindex $params 1]]
-     mt::seed "0x[lindex $params 2]"
-  }
-}
-
-proc new_iv {} {
-  return [binary format I4 [mt::int32] [mt::int32] [mt::int32] [mt::int32]]
 }
 
 proc open_connection {} {
@@ -48,10 +25,10 @@ proc send {data} {
   variable socket_inst
   set data [encrypt $data]
   set data_len [string bytelength $data]
-  set data_len [binary format W $data_len]
-  set data_md5 [::md5::md5 $data]
+  set data_len [format %16x $data_len]
+  set data_len [encoding convertto utf-8 $data_len]
   puts -nonewline $socket_inst $data_len
-  puts -nonewline $socket_inst $data_md5
+  flush $socket_inst
   puts -nonewline $socket_inst $data
   flush $socket_inst
 }
@@ -63,7 +40,6 @@ proc receive_bytes {num} {
   while {$num > [string bytelength $recv_data]} {
     set diff [expr $num - [string bytelength $recv_data]]
     set received [read $socket_inst $diff]
-    #puts $received
     append recv_data $received
   }
 
@@ -75,52 +51,21 @@ proc receive_bytes {num} {
 }
 
 proc receive {} {
-  binary scan [receive_bytes 8] W data_len
-  set data_md5 [receive_bytes 16]
+  set data_len [receive_bytes 16]
+  set data_len [encoding convertfrom utf-8 $data_len]
+  set data_len [scan $data_len %x]
   set data [receive_bytes $data_len]
-
-  if {$data_md5 != [::md5::md5 $data]} {
-    error "MD5 tcl does not match"
-  }
-
   return [decrypt $data]
 }
 
 proc encrypt {data} {
-  variable aes_key
-  variable aes_blocksize
   set data [encoding convertto utf-8 $data]
-  set data [binary format a* $data]
-
-  if {$aes_key != ""} {
-    set iv [new_iv]
-    set pad [expr $aes_blocksize - ([string bytelength $data] % $aes_blocksize)]
-    if {$pad == 0} {
-      set pad $aes_blocksize
-    }
-    set pad [string repeat [binary format c $pad] $pad]
-    append data $pad
-    set data [::aes::aes -mode cbc -dir encrypt -key $aes_key -iv $iv $data]
-  }
-
   return $data
 }
 
 proc decrypt {data} {
-  variable aes_key
-  variable aes_blocksize
-
-  if {$aes_key != ""} {
-    set format_string a$aes_blocksize
-    append format_string a*
-    binary scan $format_string $data iv data
-    set data [::aes::aes -mode cbc -dir decrypt -key $aes_key -iv $iv $data]
-    set pad [string range $data end end]
-    set pad [binary scan $pad c pad]
-    set data [string range $data 0 end-$pad]
-  }
-
-  return [encoding convertfrom utf-8 $data]
+  set data [encoding convertfrom utf-8 $data]
+  return $data
 }
 
 proc close_connection {} {
@@ -137,7 +82,7 @@ proc register_function {name idx} {
 
 rename ::exit exit_
 
-proc ::exit {retval} {
+proc ::exit {{retval 0}} {
   send "exit $retval"
   exit_ $retval
 }

@@ -11,21 +11,18 @@ class Interpreter:
     MAX_MSG_SIZE=16384
     def __init__(self,
                  command="tclsh {script} {tcl_args}", env=None,
-                 redirect_stdout=False, encrypt_data=False,
-                 port=None):
+                 redirect_stdout=True, port=None):
 
         self.command_list = []
         self.command = command
         self.env = env
         self.redirect_stdout = redirect_stdout
-        self.encrypt_data = encrypt_data
         self.port = port
         self.registered_fun = []
 
         self.communicator = Communicator(self.command,
                                          self.env,
                                          self.redirect_stdout,
-                                         self.encrypt_data,
                                          self.port)
 
     def open(self):
