@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools >= 61.0"]
+requires = ["setuptools >= 64.0", "setuptools_scm>=8"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "pytcldriver"
-version = "0.0.1"
+dynamic = ["version"]
 dependencies = [
   "importlib-resources",
   "pycryptodome",
@@ -21,6 +21,12 @@ maintainers = [
 description = "This library drives Tcl interpreters exposing their values, methods and namespaces in a pythonic way"
 readme = "README.md"
 license = {file = "LICENSE.txt"}
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.package-data]
+pytcldriver = ["*.tcl", "*.pcx"]
 
 [project.urls]
 # Homepage = ""
