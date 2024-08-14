@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools >= 61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pytcldriver"
+version = "0.0.1"
+dependencies = [
+  "importlib-resources",
+  "pycryptodome",
+]
+
+authors = [
+  {name = "Andrea Bellandi", email = "andrea.bellandi@desy.de"},
+]
+
+maintainers = [
+  {name = "Andrea Bellandi", email = "andrea.bellandi@desy.de"},
+]
+
+description = "This library drives Tcl interpreters exposing their values, methods and namespaces in a pythonic way"
+readme = "README.md"
+license = {file = "LICENSE.txt"}
+
+[project.urls]
+# Homepage = ""
+# Documentation = ""
+# Repository = ""
+# Issues = ""
+# Changelog = ""

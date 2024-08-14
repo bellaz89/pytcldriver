@@ -1,8 +1,9 @@
 import tkinter
 from tkinter import _magic_re, _space_re
+from pytcldriver.tcl import TCL_DICT_PATH
 
 TKINTER = tkinter.Tcl()
-TKINTER.call("source", "dict.tcl") # For older versions of TCL
+TKINTER.call("source", TCL_DICT_PATH) # For older versions of TCL
 
 # Needed modified join and stringify from tkinter
 ##########################################################
@@ -167,9 +168,6 @@ def info_vars(interp, pattern=None):
     else:
         return interp.eval("info vars").split(" ")
 
-def info_tclversion(interp):
-    return interp.eval("info tclversion")
-
 def list_get(list_, *indices):
     return TKINTER.eval("lindex " + stringify(list_) + " " +
                         stringify(indices))
@@ -180,6 +178,12 @@ def list_set(list_, index, value):
                         stringify(index) + " " +
                         stringify(index) + " " +
                         stringify(value))
+
+def list_range(list_, start, end):
+    return TKINTER.eval("lrange " +
+                        stringify(list_) +
+                        stringify(start) +
+                        stringify(end))
 
 def list_size(list_):
     return TKINTER.call("llength", list_)

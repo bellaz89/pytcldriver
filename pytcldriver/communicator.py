@@ -3,22 +3,26 @@ import struct
 from subprocess import Popen, PIPE
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
+from Crypto.Hash import MD5
 import binascii
 import atexit
 
 RANDOM_SIZE=16
 PACKET_SIZE=1024
 LEN_SIZE=8
-POPEN_TIMEOUT=5.0
+LEN_MD5=16
+POPEN_CLOSE_TIMEOUT=5.0
 
 class Communicator(object):
-    def __init__(self, interpreter_path, env=None,
-                 redirect_stdout=False, encrypt_data=False):
+    def __init__(self, command, env=None,
+                 redirect_stdout=False, encrypt_data=False,
+                 port=None):
 
         self.fragment = bytes()
         self.process = None
-        self.stdout = None
-        self.stderr = None
+        self.stdout = ""
+        self.stderr = ""
+        self.port = port
 
         if encrypt_data:
             self.aes_key = get_random_bytes(RANDOM_SIZE)
@@ -28,14 +32,28 @@ class Communicator(object):
         self.socket = None
 
     def open(self):
+        atexit.register(self.close)
         self.fragment = bytes()
-        self.stdout = None
-        self.stderr = None
+        self.stdout = ""
+        self.stderr = ""
 
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.socket.bind(('', 0))
-        self.socket.listen(1)
 
+        if self.port == None:
+            self.socket.bind(('', 0))
+        elif isinstance(self.port, int):
+            self.socket.bind(('', self.port))
+        else:
+            for i, port in enumerate(self.port):
+                try:
+                    self.socket.bind(('', port))
+                except socket.error as error:
+                    if i+1 == len(self.port):
+                        raise error
+
+                    continue
+
+        self.socket.listen(1)
         port = self.socket.getsockname()[1]
         tcl_args = str(port)
 
@@ -44,7 +62,7 @@ class Communicator(object):
             tcl_args += " " + binascii.hexlify(aes_key)
             tcl_args += " " + binascii.hexlify(tcl_seed)
 
-        args = shlex.split(interpreter_path.format(tcl_args=tcl_args))
+        args = shlex.split(command.format(tcl_args=tcl_args))
         self.redirect_stdout = redirect_stdout
 
         if self.redirect_stdout:
@@ -60,15 +78,23 @@ class Communicator(object):
 
     def send(self, message):
         data = self.encrypt(message)
+        data_md5 = MD5.new(data).digest()
         data_len = len(data)
         data_len = data_len.to_bytes(LEN_SIZE, "big")
         self.ctrl.send(data_len)
+        self.ctrl.send(data_md5)
         self.ctrl.send(data)
 
     def receive(self):
         data_len = self.receive_bytes(LEN_SIZE)
         data_len = int.from_bytes(data_len, "big")
+        data_md5 = self.receive_bytes(LEN_MD5)
         data = self.receive_bytes(data_len)
+
+        if MD5.new(data).digest() != data_md5:
+            print("MD5 python does not match")
+            #raise RuntimeError("Received hash does not match the computed one")
+
         return self.decrypt(data)
 
     def receive_bytes(self, num):
@@ -109,12 +135,12 @@ class Communicator(object):
 
     def close(self):
         try:
-            self.send("exit")
+            self.send("exit 0")
         except:
             pass
 
         try:
-            self.process.wait(timeout=POPEN_TIMEOUT)
+            self.process.wait(timeout=POPEN_CLOSE_TIMEOUT)
             if self.check_alive() is not None:
                 self.process.kill()
         except:
@@ -132,13 +158,8 @@ class Communicator(object):
         if self.redirect_stdout:
             self.stdout = self.process.stdout.read().decode("utf-8")
             self.stderr = self.process.stderr.read().decode("utf-8")
-
-    def get_stdout(self):
-        if isinstance(self.stdout, str):
-            return (self.stdout, self.stderr)
         else:
-            return ("", "")
+            self.stdout = ""
+            self.stderr = ""
 
-
-
-
+        atexit.unregister(self.close)
