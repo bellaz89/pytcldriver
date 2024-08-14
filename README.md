@@ -13,8 +13,58 @@ numbers, strings, lists, arrays and dictionaries.
 Installation
 ------------
 
+```
+  pip install git+https://github.com/bellaz89/pytcldriver.git
+```
+
 Examples
 --------
 
+```python
+  from pytcldriver import Interpreter, Namespace
+
+  interp = Interpreter()
+  # Returns the namespace '::'
+  tcl_namespace = interp.open()
+
+  # Tcl methods can be directly called from the namespace
+  tcl_namespace.expr("1", "+", "1")
+
+  tcl_namespace.a = 12 # Tcl variable in '::'
+  print(tcl_namespace.a)
+  tcl_namespace.a.num += 2
+  print(tcl_namespace.a)
+
+  # Use dir to see all the defined variables, methods and namespace defined
+  # in the Tcl interpreter
+  dir(tcl_namespace)
+
+  interp.eval("list 1 2 3") # Methods can be also explicitly called
+
+  # Requires Vivado installed
+  from pytcldriver.xilinx import Vivado
+  interp = Vivado()
+  tcl_namespace = interp.open() # Returns the namespace '::'
+  print(tcl_namespace.version(), "\n")
+
+  # Requires ISE installed
+  from pytcldriver.xilinx import ISE
+  interp.open()
+
+  # Requires PlanAhead installed
+  from pytcldriver.xilinx import PlanAhead
+  interp = PlanAhead()
+  tcl_namespace = interp.open() # Returns the namespace '::'
+  print(tcl_namespace.version(), "\n")
+
+  # Requires Vitis installed
+  from pytcldriver.xilinx import Vitis
+  interp = Vitis()
+  tcl_namespace = interp.open() # Returns the namespace '::'
+  print(tcl_namespace.version(), "\n")
+```
+
 Mantainers
 ----------
+
+Andrea Bellandi (andrea.bellandi@desy.de)
