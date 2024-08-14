@@ -57,6 +57,10 @@ class PlanAhead(Xilinx):
         return "PlanAhead/bin/planAhead -mode batch -source {script} -tclargs {tcl_args}"
 
     def find_program_dir(self):
-        return Path(shutil.which("planAhead")).parents[2]
+        program_dir = shutil.which("planAhead")
+        if program_dir:
+            return Path(program_dir).parents[2]
+        else:
+            return Path(shutil.which("ise")).parents[3]
 
 
