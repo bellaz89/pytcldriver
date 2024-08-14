@@ -39,7 +39,12 @@ Examples
   # in the Tcl interpreter
   dir(tcl_namespace)
 
-  interp.eval("list 1 2 3") # Methods can be also explicitly called
+  # Methods can be also explicitly called
+  interp.eval("list 1 2 3")
+
+  # It is possible to register a function callable from tcl
+  tcl_namespace.add1 = lambda x: float(x) + 1
+  print(tcl_namespace.add1(10))
 
   # Requires Vivado installed
   from pytcldriver.xilinx import Vivado
