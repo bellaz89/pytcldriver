@@ -10,15 +10,10 @@ from .utils import join, stringify, list_get, list_range, list_size
 class Interpreter:
     MAX_MSG_SIZE=16384
     def __init__(self,
-                 command="tclsh comm.tcl {tcl_args}", env=None,
+                 command="tclsh {script} {tcl_args}", env=None,
                  redirect_stdout=False, encrypt_data=False,
                  port=None):
 
-        self.communicator = Communicator(self.command,
-                                         self.env,
-                                         self.redirect_stdout,
-                                         self.encrypt_data,
-                                         self.port)
         self.command_list = []
         self.command = command
         self.env = env
@@ -26,6 +21,12 @@ class Interpreter:
         self.encrypt_data = encrypt_data
         self.port = port
         self.registered_fun = []
+
+        self.communicator = Communicator(self.command,
+                                         self.env,
+                                         self.redirect_stdout,
+                                         self.encrypt_data,
+                                         self.port)
 
     def open(self):
         self.registered_fun = []
@@ -52,13 +53,14 @@ class Interpreter:
                                    "executing .eval(\"" + fun + "\")")
 
             elif code == "error":
-                raise RuntimeError("While executing .eval(\"" + fun + "\")")
+                raise RuntimeError("While executing .eval(\"" + fun + "\"): " +
+                                   args)
 
             elif code == "call":
                 [fun_id, args] = args.split(" ", 1)
-                args = [self.list_get(args, i)
+                args = [list_get(args, i)
                         for i
-                        in range(self.list_size(args))]
+                        in range(list_size(args))]
 
                 retval = None
                 try:

@@ -1,6 +1,6 @@
 import tkinter
 from tkinter import _magic_re, _space_re
-from pytcldriver.tcl import TCL_DICT_PATH
+from .tcl import TCL_DICT_PATH
 
 TKINTER = tkinter.Tcl()
 TKINTER.call("source", TCL_DICT_PATH) # For older versions of TCL
@@ -180,9 +180,9 @@ def list_set(list_, index, value):
                         stringify(value))
 
 def list_range(list_, start, end):
-    return TKINTER.eval("lrange " +
-                        stringify(list_) +
-                        stringify(start) +
+    return TKINTER.eval("lrange" + " " +
+                        stringify(list_) + " " +
+                        stringify(start) + " " +
                         stringify(end))
 
 def list_size(list_):
@@ -244,14 +244,14 @@ def normalize_list_index(index):
         else:
             return str(index)
 
-def parse_num(self, value):
+def parse_num(value):
         try:
             return TKINTER.call("expr", value, "+", "0")
         except:
             try:
-                if self.list_size(value) == 2:
-                    return complex(parse_num(self.list_get(value, 0)),
-                                   parse_num(self.list_get(value, 1)))
+                if list_size(value) == 2:
+                    return complex(parse_num(list_get(value, 0)),
+                                   parse_num(list_get(value, 1)))
                 else:
                     raise Exception("Error")
             except:

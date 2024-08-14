@@ -6,6 +6,8 @@ from Crypto.Random import get_random_bytes
 from Crypto.Hash import MD5
 import binascii
 import atexit
+import shlex
+from .tcl import TCL_MAIN_PATH
 
 RANDOM_SIZE=16
 PACKET_SIZE=1024
@@ -22,14 +24,17 @@ class Communicator(object):
         self.process = None
         self.stdout = ""
         self.stderr = ""
-        self.port = port
+        self.socket = None
 
         if encrypt_data:
             self.aes_key = get_random_bytes(RANDOM_SIZE)
 
+        self.command = command
+        self.env = env
+        self.redirect_stdout = redirect_stdout
         self.encrypt_data = encrypt_data
+        self.port = port
 
-        self.socket = None
 
     def open(self):
         atexit.register(self.close)
@@ -57,13 +62,13 @@ class Communicator(object):
         port = self.socket.getsockname()[1]
         tcl_args = str(port)
 
-        if encrypt_data:
+        if self.encrypt_data:
             tcl_seed = get_random_bytes(RANDOM_SIZE)
             tcl_args += " " + binascii.hexlify(aes_key)
             tcl_args += " " + binascii.hexlify(tcl_seed)
 
-        args = shlex.split(command.format(tcl_args=tcl_args))
-        self.redirect_stdout = redirect_stdout
+        args = shlex.split(self.command.format(script=TCL_MAIN_PATH,
+                                               tcl_args=tcl_args))
 
         if self.redirect_stdout:
             self.process = Popen(args,
@@ -85,6 +90,15 @@ class Communicator(object):
         self.ctrl.send(data_md5)
         self.ctrl.send(data)
 
+    def receive_bytes(self, num):
+
+        while len(self.fragment) < num:
+            self.fragment += self.ctrl.recv(PACKET_SIZE)
+
+        data = self.fragment[:num]
+        self.fragment = self.fragment[num:]
+        return data
+
     def receive(self):
         data_len = self.receive_bytes(LEN_SIZE)
         data_len = int.from_bytes(data_len, "big")
@@ -92,18 +106,9 @@ class Communicator(object):
         data = self.receive_bytes(data_len)
 
         if MD5.new(data).digest() != data_md5:
-            print("MD5 python does not match")
-            #raise RuntimeError("Received hash does not match the computed one")
+            raise RuntimeError("Received hash does not match the computed one")
 
         return self.decrypt(data)
-
-    def receive_bytes(self, num):
-        while len(self.fragment) < num:
-            self.fragment += self.ctrl.recv(PACKET_SIZE)
-
-        data = self.fragment[:num]
-        self.fragment = self.fragment[num:]
-        return data
 
     def encrypt(self, message):
         data = message.encode()
@@ -118,7 +123,7 @@ class Communicator(object):
             data += pad.to_bytes(1, "big") * pad
             return iv + cipher.encrypt(data)
         else:
-            return encoded
+            return data
 
     def decrypt(self, data):
         if self.encrypt_data:

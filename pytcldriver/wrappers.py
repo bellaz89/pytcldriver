@@ -1,5 +1,5 @@
 import math
-from utils import *
+from .utils import *
 from collections.abc import MutableSequence, MutableMapping
 from collections import UserString
 
@@ -76,6 +76,7 @@ class NamespaceWrapper(Addressable):
         address = ns_address + "::" + stringify(name)
         interpreter = interpreter
 
+        from . import Namespace, Array
         if isinstance(value, Namespace):
             _del_nothrow(self, name)
             namespace_create(interpreter, address)
@@ -183,6 +184,7 @@ class PublicProperties(Addressable):
 
     @property
     def namespace(self):
+        from . import Namespace
         return Namespace(self.interpreter,
                          qualifiers(self.address))
 
@@ -249,14 +251,11 @@ class VariableWrapper(PublicProperties):
 
     @num.setter
     def num(self, value):
-        self.set(self.interpreter.parse_num(str(value)))
-
-    def _parse_num(self):
-        return interpreter.parse_num(self.get())
+        self.set(parse_num(str(value)))
 
     @property
     def int(self):
-        return int(self._parse_num())
+        return int(parse_num(self.get()))
 
     @int.setter
     def int(self, value):
@@ -264,7 +263,7 @@ class VariableWrapper(PublicProperties):
 
     @property
     def float(self):
-        return float(self._parse_num())
+        return float(parse_num(self.get()))
 
     @float.setter
     def float(self, value):
@@ -272,7 +271,7 @@ class VariableWrapper(PublicProperties):
 
     @property
     def bool(self):
-        return bool(self._parse_num())
+        return bool(parse_num(self.get()))
 
     @bool.setter
     def bool(self, value):
@@ -280,7 +279,7 @@ class VariableWrapper(PublicProperties):
 
     @property
     def complex(self):
-        return complex(self._parse_num())
+        return complex(parse_num(self.get()))
 
     @complex.setter
     def complex(self, value):

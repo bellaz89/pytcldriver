@@ -2,20 +2,22 @@ variable socket_port ""
 variable socket_inst ""
 variable aes_key ""
 variable prng ""
+variable recv_data ""
 variable aes_blocksize 16
+variable comm_stack 0
 
 set script_dir [file dirname $::argv0]
 source [file join $script_dir dict.tcl]
 source [file join $script_dir mt19937.tcl]
 
-if { [catch {package require aes]} {
+if {[catch {package require aes}]} {
   set dir [file join $script_dir aes]
   source [file join $script_dir aes/pkgIndex.tcl]
   package require aes
   unset dir
 }
 
-if { [catch {package require md5]} {
+if {[catch {package require md5}]} {
   set dir [file join $script_dir md5]
   source [file join $script_dir md5/pkgIndex.tcl]
   package require md5
@@ -48,20 +50,37 @@ proc send {data} {
   set data_len [string bytelength $data]
   set data_len [binary format W $data_len]
   set data_md5 [::md5::md5 $data]
-  puts -nonewline $data_len
-  puts -nonewline $data_md5
-  puts -nonewline $data
+  puts -nonewline $socket_inst $data_len
+  puts -nonewline $socket_inst $data_md5
+  puts -nonewline $socket_inst $data
   flush $socket_inst
 }
 
-proc receive {} {
+proc receive_bytes {num} {
   variable socket_inst
-  binary scan W [read $socket_inst 8] data_len
-  set data_md5 [read $socket_inst 16]
-  set data [read $socket_inst $data_len]
+  variable recv_data
+
+  while {$num > [string bytelength $recv_data]} {
+    set diff [expr $num - [string bytelength $recv_data]]
+    set received [read $socket_inst $diff]
+    #puts $received
+    append recv_data $received
+  }
+
+  set format_string a$num
+  append format_string a*
+  binary scan $recv_data $format_string result recv_data
+
+  return $result
+}
+
+proc receive {} {
+  binary scan [receive_bytes 8] W data_len
+  set data_md5 [receive_bytes 16]
+  set data [receive_bytes $data_len]
 
   if {$data_md5 != [::md5::md5 $data]} {
-    puts "MD5 tcl does not match"
+    error "MD5 tcl does not match"
   }
 
   return [decrypt $data]
@@ -101,9 +120,7 @@ proc decrypt {data} {
     set data [string range $data 0 end-$pad]
   }
 
-  set data [binary scan a* $data]
-  set data [encoding convertfrom utf-8 $data]
-  return $data
+  return [encoding convertfrom utf-8 $data]
 }
 
 proc close_connection {} {
@@ -126,13 +143,16 @@ proc ::exit {retval} {
 }
 
 proc communicate {} {
+  variable comm_stack
+  incr comm_stack 1
+
   while {1} {
     set data [receive]
-    if {[lindex $data 0] == "error"} {
+    set cmd [lindex $data 0]
+    if {($cmd == "error") || ($cmd == "return")} {
+      incr comm_stack -1
       uplevel $data
-    }
-
-    if {[catch [set result [uplevel $data err]]]} {
+    } elseif {[catch {set result [uplevel $data]} err]} {
       send "error $err"
     } else {
       send "return $result"
