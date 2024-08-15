@@ -148,7 +148,10 @@ class Communicator(object):
 
         if self.encrypt_data:
             aes_key = get_random_bytes(16)
-            self.send("::private_pytcldriver_::rekey " + aes_key.hex())
+            self.send("::private_pytcldriver_::rekey " +
+                      aes_key.hex() + " " +
+                      get_random_bytes(8).hex())
+
             self.aes_key = aes_key
             assert self.receive() == "return 1"
 

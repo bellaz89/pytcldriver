@@ -56,8 +56,9 @@ proc ::private_pytcldriver_::init {params} {
   }
 }
 
-proc ::private_pytcldriver_::rekey {new_key} {
+proc ::private_pytcldriver_::rekey {new_key new_seed} {
   variable aes_key [binary format H* $new_key]
+  mt::seed "0x$new_seed"
   return 1
 }
 
