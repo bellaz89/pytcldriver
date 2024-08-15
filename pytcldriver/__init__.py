@@ -26,7 +26,7 @@ import socket
 import atexit
 
 from .communicator import Communicator
-from .wrappers import NamespaceWrapper
+from .wrappers import NamespaceWrapper, ReturnStringWrapper
 from .utils import join, stringify, list_get, list_range, list_size
 
 class Interpreter:
@@ -76,7 +76,7 @@ class Interpreter:
             args = list_range(data, 1, "end")
 
             if code == "return":
-                return args
+                return ReturnStringWrapper(args)
 
             elif code == "exit":
                 self.communicator.close()

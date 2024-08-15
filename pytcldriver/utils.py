@@ -34,10 +34,12 @@ def join(value):
     return ' '.join(map(stringify, value))
 
 def stringify(value):
+    from pytcldriver.wrappers import ArrayWrapper
+
     if isinstance(value, bool):
         value = int(value)
 
-    if isinstance(value, (list, tuple)):
+    if isinstance(value, (list, tuple, ArrayWrapper)):
         if len(value) == 1:
             value = stringify(value[0])
             if _magic_re.search(value):
@@ -157,7 +159,7 @@ def dict_iter_values(dict_):
         yield list_get(values, i)
 
 def dict_iter_items(dict_):
-    for key in interp.dict_iter_keys(dict_):
+    for key in dict_iter_keys(dict_):
         yield key, dict_get(dict_, key)
 
 def dict_iter_keys(dict_):

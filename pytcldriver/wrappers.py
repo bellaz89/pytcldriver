@@ -25,10 +25,44 @@ from .utils import *
 from collections.abc import MutableSequence, MutableMapping
 from collections import UserString
 
+
+class ReturnStringWrapper(str):
+    @property
+    def list(self):
+        return ReturnListWrapper(to_list(self))
+
+    @property
+    def dict(self):
+        return ReturnDictionaryWrapper(to_dict(self))
+
+    @property
+    def num(self):
+        return parse_num(self)
+
+
+class ReturnListWrapper(list):
+    def __getitem__(self, index):
+        value = super(ReturnListWrapper, self).__getitem__(index)
+        return ReturnStringWrapper(value)
+
+    def __setitem__(self, index, value):
+        super(ReturnListWrapper, super).__setitem__(index, stringify(value))
+
+
+class ReturnDictionaryWrapper(dict):
+    def __getitem__(self, key):
+        value = super(ReturnDictionaryWrapper, self).__getitem__(index)
+        return ReturnStringWrapper(value)
+
+    def __setitem__(self, key, value):
+        super(ReturnDictionaryWrapper, super).__setitem__(index, stringify(value))
+
+
 class Addressable(object):
     def __init__(self, interpreter, address):
         self.__dict__["__private_interpreter"] = interpreter
         self.__dict__["__private_address"] = address
+
 
 def _children_addresses(ns):
     address = ns.__dict__["__private_address"]
@@ -61,7 +95,7 @@ class NamespaceWrapper(Addressable):
 
     def __call__(self, arg, *args):
         (interpreter, address) = self.__private()
-        namespace_eval(interpreter, address, arg, *args)
+        return ReturnStringWrapper(namespace_eval(interpreter, address, arg, *args))
 
     def __dir__(self):
         (interpreter, _) = self.__private()
@@ -98,13 +132,25 @@ class NamespaceWrapper(Addressable):
         address = ns_address + "::" + stringify(name)
         interpreter = interpreter
 
-        from . import Namespace, Array
+        from pytcldriver import Namespace, Array
         if isinstance(value, Namespace):
             _del_nothrow(self, name)
             namespace_create(interpreter, address)
             ns = self[name]
             for key, val in value.items():
-                ns[key] = val
+                ns[key] = value[key]
+
+        if isinstance(value, NamespaceWrapper):
+            _del_nothrow(self, name)
+            namespace_create(interpreter, address)
+            ns = self[name]
+            for key in dir(value):
+                ns[key] = value[key]
+
+        elif isinstance(value, (VariableWrapper, ArrayWrapper)):
+            value = value.get()
+            _del_nothrow(self, name)
+            interpreter.set(address, value)
 
         elif isinstance(value, Array):
             _del_nothrow(self, name)
@@ -116,11 +162,6 @@ class NamespaceWrapper(Addressable):
         elif callable(value):
             _del_nothrow(self, name)
             interpreter.register_fun(address, value)
-
-        elif isinstance(value, VariableWrapper):
-            value = value.get()
-            _del_nothrow(self, name)
-            interpreter.set(address, value)
 
         else:
             _del_nothrow(self, name)
@@ -206,7 +247,7 @@ class PublicProperties(Addressable):
 
     @property
     def namespace(self):
-        from . import Namespace
+        from pytcldriver import Namespace
         return Namespace(self.interpreter,
                          qualifiers(self.address))
 
@@ -217,7 +258,9 @@ class FunctionWrapper(PublicProperties):
         super(FunctionWrapper, self).__init__(interpreter, address)
 
     def __call__(self, *args):
-        return self.interpreter.eval(self.address + " " + join(args))
+        return ReturnStringWrapper(self.interpreter.eval(self.address + " " +
+                                                         join(args)))
+
 
 def _get_val(val):
     if isinstance(val, VariableWrapper):
@@ -346,7 +389,6 @@ class StringWrapper(UserString, VariableWrapper):
         else:
             return super().__new__(cls)
 
-
     def __init__(self, interpreter, address, rw_functions=None):
         self.wrapper = VariableWrapper(interpreter, address, rw_functions)
 
@@ -430,6 +472,7 @@ class ListWrapper(VariableWrapper, MutableSequence):
 
     def set(self, value):
         self._set(list(value))
+
 
 class DictionaryWrapper(VariableWrapper, MutableMapping):
     def _extend_rw(self, indices):
