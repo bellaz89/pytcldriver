@@ -54,7 +54,8 @@ Examples
 
   # Requires ISE installed
   from pytcldriver.xilinx import ISE
-  interp.open()
+  interp = ISE()
+  tcl_namespace = interp.open()
 
   # Requires PlanAhead installed
   from pytcldriver.xilinx import PlanAhead
