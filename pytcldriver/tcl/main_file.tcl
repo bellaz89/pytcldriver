@@ -7,8 +7,8 @@ close $fp
 
 # Remove to prevent the encryption key to be readable
 file delete [file join $script_dir args]
-unset script_dir
 
 init $arguments
 open_connection
+unset script_dir
 communicate

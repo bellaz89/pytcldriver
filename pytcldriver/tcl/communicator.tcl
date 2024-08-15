@@ -1,9 +1,11 @@
-variable socket_port ""
-variable socket_inst ""
+variable port ""
+variable fp_p2t ""
+variable fp_t2p ""
 variable aes_key ""
 variable prng ""
 variable recv_data ""
 variable comm_stack 0
+variable script_dir [file dirname $::argv0]
 
 source [file join $script_dir dict.tcl]
 source [file join $script_dir mt19937.tcl]
@@ -23,7 +25,7 @@ if {[catch {package require aes} err]} {
 }
 
 proc init {params} {
-  variable socket_port [lindex $params 0]
+  variable port [lindex $params 0]
   if {[llength $params] > 1} {
      variable aes_key [binary format H* [lindex $params 1]]
      mt::seed "0x[lindex $params 2]"
@@ -57,30 +59,40 @@ proc pad_extend {pad} {
 }
 
 proc open_connection {} {
-  variable socket_port
-  variable socket_inst [socket localhost $socket_port]
-  fconfigure $socket_inst -translation binary
+  variable port
+  variable fp_p2t
+  variable fp_t2p
+  variable script_dir
+
+  if {$port == "pipe"} {
+    set fp_p2t [open [file join $script_dir pipe_p2t] "r"]
+    set fp_t2p [open [file join $script_dir pipe_t2p] "w"]
+  } else {
+    set sock [socket localhost $port]
+    fconfigure $sock -translation binary
+    set fp_p2t $sock
+    set fp_t2p $sock
+  }
 }
 
 proc send {data} {
-  variable socket_inst
+  variable fp_t2p
   set data [encrypt $data]
   set data_len [string bytelength $data]
   set data_len [format %16x $data_len]
   set data_len [encoding convertto utf-8 $data_len]
-  puts -nonewline $socket_inst $data_len
-  flush $socket_inst
-  puts -nonewline $socket_inst $data
-  flush $socket_inst
+  puts -nonewline $fp_t2p $data_len
+  puts -nonewline $fp_t2p $data
+  flush $fp_t2p
 }
 
 proc receive_bytes {num} {
-  variable socket_inst
+  variable fp_p2t
   variable recv_data
 
   while {$num > [string bytelength $recv_data]} {
     set diff [expr $num - [string bytelength $recv_data]]
-    set received [read $socket_inst $diff]
+    set received [read $fp_p2t $diff]
     append recv_data $received
   }
 
@@ -150,7 +162,17 @@ proc register_function {name idx} {
 rename ::exit exit_
 
 proc ::exit {{retval 0}} {
+  variable fp_p2t
+  variable fp_t2p
   send "exit $retval"
+
+  if {$fp_p2t != $fp_t2p} {
+    close $fp_p2t
+    close $fp_t2p
+  } else {
+    close $fp_t2p
+  }
+
   exit_ $retval
 }
 

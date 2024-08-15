@@ -39,6 +39,8 @@ class ResourcesDirectory(object):
         self.resources_path = self.directory.name
         self.main_shell_path = os.path.join(tcl_sources_directory, "main_shell.tcl")
         self.main_file_path = os.path.join(tcl_sources_directory, "main_file.tcl")
+        self.pipe_p2t = os.path.join(tcl_sources_directory, "pipe_p2t")
+        self.pipe_t2p = os.path.join(tcl_sources_directory, "pipe_t2p")
 
     def close(self):
         self.directory.cleanup()

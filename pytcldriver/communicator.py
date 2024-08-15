@@ -12,8 +12,11 @@ PACKET_SIZE=1024
 POPEN_CLOSE_TIMEOUT=5.0
 
 class Communicator(object):
-    def __init__(self, command, env=None, redirect_stdout=True, port=None,
-                 encrypt_data=True, args_passing="file"):
+    def __init__(self, command, env=None,
+                 redirect_stdout=True,
+                 communication="auto", port=None,
+                 encrypt_data=True,
+                 args_passing="file"):
 
         self.fragment = bytes()
         self.process = None
@@ -22,6 +25,8 @@ class Communicator(object):
         self.socket = None
         self.resources = None
         self.aes_key = None
+        self.pipe_p2t = None
+        self.pipe_t2p = None
 
         self.command = command
         self.env = env
@@ -30,41 +35,62 @@ class Communicator(object):
         self.encrypt_data = encrypt_data
         self.args_passing = args_passing
 
+        if communication == "auto":
+            if os.name == "posix":
+                communication = "pipe"
+            else:
+                communication = "socket"
+
+        self.communication = communication
+
     def open(self):
         atexit.register(self.close)
         self.fragment = bytes()
         self.stdout = ""
         self.stderr = ""
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.resources = ResourcesDirectory()
 
         if self.encrypt_data:
             self.aes_key = get_random_bytes(16)
         else:
             self.aes_key = None
 
-        if self.port == None:
-            self.socket.bind(('', 0))
-        elif isinstance(self.port, int):
-            self.socket.bind(('', self.port))
+        tcl_args = None
+
+        if self.communication == "socket":
+            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            if self.port == None:
+                self.socket.bind(('', 0))
+            elif isinstance(self.port, int):
+                self.socket.bind(('', self.port))
+            else:
+                for i, port in enumerate(self.port):
+                    try:
+                        self.socket.bind(('', port))
+                    except socket.error as error:
+                        if i+1 == len(self.port):
+                            raise error
+
+                        continue
+
+            port = self.socket.getsockname()[1]
+            self.socket.listen(1)
+            tcl_args = str(port)
+
+        elif self.communication == "pipe":
+            os.mkfifo(self.resources.pipe_p2t, mode=0o600)
+            os.mkfifo(self.resources.pipe_t2p, mode=0o600)
+            tcl_args = "pipe"
+
         else:
-            for i, port in enumerate(self.port):
-                try:
-                    self.socket.bind(('', port))
-                except socket.error as error:
-                    if i+1 == len(self.port):
-                        raise error
+            self.close()
+            raise Exception("Unknown communication method. " \
+                            "Choose either 'socket' or 'pipe'")
 
-                    continue
-
-        self.socket.listen(1)
-        port = self.socket.getsockname()[1]
-        tcl_args = str(port)
 
         if self.encrypt_data:
             tcl_args += " " + self.aes_key.hex()
             tcl_args += " " + get_random_bytes(8).hex()
-
-        self.resources = ResourcesDirectory()
 
         if self.args_passing == "shell":
             args = shlex.split(self.command.format(script=self.resources.main_shell_path,
@@ -90,19 +116,34 @@ class Communicator(object):
             self.process = Popen(args,
                                  env=self.env)
 
-        self.ctrl, self.address = self.socket.accept()
+        if self.communication == "socket":
+            self.ctrl, self.address = self.socket.accept()
+
+        if self.communication == "pipe":
+            self.pipe_p2t = open(self.resources.pipe_p2t, "wb")
+            self.pipe_t2p = open(self.resources.pipe_t2p, "rb")
 
     def send(self, message):
         data = self.encrypt(message)
         data_len = len(data)
         data_len = "%16x" % data_len
         data_len = data_len.encode("utf-8")
-        self.ctrl.send(data_len)
-        self.ctrl.send(data)
+        data = data_len + data
+
+        if self.communication == "socket":
+            self.ctrl.send(data)
+
+        if self.communication == "pipe":
+            self.pipe_p2t.write(data)
+            self.pipe_p2t.flush()
 
     def receive_bytes(self, num):
-        while len(self.fragment) < num:
-            self.fragment += self.ctrl.recv(PACKET_SIZE)
+        if self.communication == "socket":
+            while len(self.fragment) < num:
+                self.fragment += self.ctrl.recv(PACKET_SIZE)
+
+        if self.communication == "pipe":
+            self.fragment += self.pipe_t2p.read(num - len(self.fragment))
 
         data = self.fragment[:num]
         self.fragment = self.fragment[num:]
@@ -162,15 +203,25 @@ class Communicator(object):
         except:
             pass
 
-        try:
-            self.socket.close()
-        except:
-            pass
+        if self.communication == "socket":
+            try:
+                self.socket.close()
+            except:
+                pass
 
-        try:
-            self.resources.close()
-        except:
-            pass
+            try:
+                self.resources.close()
+            except:
+                pass
+
+        if self.communication == "pipe":
+            try:
+                self.pipe_p2t.close()
+                self.pipe_t2p.close()
+                os.remove(self.resources.pipe_p2t)
+                os.remove(self.resources.pipe_t2p)
+            except:
+                pass
 
         self.stdout = ""
         self.stderr = ""

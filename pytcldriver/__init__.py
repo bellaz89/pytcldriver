@@ -9,21 +9,33 @@ from .utils import join, stringify, list_get, list_range, list_size
 
 class Interpreter:
     MAX_MSG_SIZE=16384
+
     def __init__(self,
-                 command="tclsh {script} {tcl_args}", env=None,
-                 redirect_stdout=False, port=None, encrypt_data=True):
+                 command="tclsh {script} {tcl_args}",
+                 env=None,
+                 redirect_stdout=True,
+                 communication="pipe",
+                 port=None,
+                 encrypt_data=True,
+                 args_passing="file"):
 
         self.command_list = []
         self.command = command
         self.env = env
         self.redirect_stdout = redirect_stdout
+        self.communication = communication
+        self.encrypt_data = encrypt_data
+        self.args_passing = args_passing
         self.port = port
         self.registered_fun = []
 
-        self.communicator = Communicator(self.command,
-                                         self.env,
-                                         self.redirect_stdout,
-                                         self.port)
+        self.communicator = Communicator(command,
+                                         env,
+                                         redirect_stdout,
+                                         communication,
+                                         port,
+                                         encrypt_data,
+                                         args_passing)
 
     def open(self):
         self.registered_fun = []
