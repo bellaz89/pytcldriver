@@ -14,7 +14,7 @@ class Interpreter:
                  command="tclsh {script} {tcl_args}",
                  env=None,
                  redirect_stdout=True,
-                 communication="pipe",
+                 communication="auto",
                  port=None,
                  encrypt_data=True,
                  args_passing="file"):
