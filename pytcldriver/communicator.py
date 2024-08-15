@@ -14,7 +14,8 @@ POPEN_CLOSE_TIMEOUT=5.0
 class Communicator(object):
     def __init__(self, command, env=None,
                  redirect_stdout=True,
-                 communication="auto", port=None,
+                 communication="auto",
+                 port=None,
                  encrypt_data=True,
                  args_passing="file"):
 
@@ -123,6 +124,12 @@ class Communicator(object):
             self.pipe_p2t = open(self.resources.pipe_p2t, "wb")
             self.pipe_t2p = open(self.resources.pipe_t2p, "rb")
 
+        if self.encrypt_data:
+            aes_key = get_random_bytes(16)
+            self.send("::private_pytcldriver_::rekey " + aes_key.hex())
+            self.aes_key = aes_key
+            assert self.receive() == "return 1"
+
     def send(self, message):
         data = self.encrypt(message)
         data_len = len(data)
@@ -198,7 +205,7 @@ class Communicator(object):
 
         try:
             self.process.wait(timeout=POPEN_CLOSE_TIMEOUT)
-            if self.check_alive() is not None:
+            if self.check_alive() == None:
                 self.process.kill()
         except:
             pass

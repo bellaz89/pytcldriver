@@ -132,7 +132,9 @@ class Interpreter:
     def register_fun(self, name, fun):
         idx = len(self.registered_fun)
         self.registered_fun.append(fun)
-        self.eval("register_function " + name + " " + str(idx))
+        self.eval("::private_pytcldriver_::register_function " +
+                  name + " " +
+                  str(idx))
 
     def close(self):
         self.communicator.close()

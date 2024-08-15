@@ -1,30 +1,32 @@
-variable port ""
-variable fp_p2t ""
-variable fp_t2p ""
-variable aes_key ""
-variable prng ""
-variable recv_data ""
-variable comm_stack 0
-variable script_dir [file dirname $::argv0]
+namespace eval ::private_pytcldriver_ {
+  variable port ""
+  variable fp_p2t ""
+  variable fp_t2p ""
+  variable aes_key ""
+  variable prng ""
+  variable recv_data ""
+  variable comm_stack 0
+  variable script_dir [file dirname $::argv0]
+}
 
 source [file join $script_dir dict.tcl]
 source [file join $script_dir mt19937.tcl]
 
 if {[catch {package require base64} err]} {
-  set dir [file join $script_dir base64]
+  set dir [file join $::private_pytcldriver_::script_dir base64]
   source [file join $dir pkgIndex.tcl]
   package require base64
   unset dir
 }
 
 if {[catch {package require aes} err]} {
-  set dir [file join $script_dir aes]
+  set dir [file join $::private_pytcldriver_::script_dir aes]
   source [file join $dir pkgIndex.tcl]
   package require aes
   unset dir
 }
 
-proc init {params} {
+proc ::private_pytcldriver_::init {params} {
   variable port [lindex $params 0]
   if {[llength $params] > 1} {
      variable aes_key [binary format H* [lindex $params 1]]
@@ -32,7 +34,12 @@ proc init {params} {
   }
 }
 
-proc new_iv {} {
+proc ::private_pytcldriver_::rekey {new_key} {
+  variable aes_key [binary format H* $new_key]
+  return 1
+}
+
+proc ::private_pytcldriver_::new_iv {} {
   set result ""
   append result [binary format I [mt::int32]]
   append result [binary format I [mt::int32]]
@@ -41,7 +48,7 @@ proc new_iv {} {
   return $result
 }
 
-proc pad_extend {pad} {
+proc ::private_pytcldriver_::pad_extend {pad} {
   set ext ""
   set N [expr $pad / 4]
 
@@ -58,7 +65,7 @@ proc pad_extend {pad} {
   return $ext
 }
 
-proc open_connection {} {
+proc ::private_pytcldriver_::open_connection {} {
   variable port
   variable fp_p2t
   variable fp_t2p
@@ -75,7 +82,7 @@ proc open_connection {} {
   }
 }
 
-proc send {data} {
+proc ::private_pytcldriver_::send {data} {
   variable fp_t2p
   set data [encrypt $data]
   set data_len [string bytelength $data]
@@ -86,7 +93,7 @@ proc send {data} {
   flush $fp_t2p
 }
 
-proc receive_bytes {num} {
+proc ::private_pytcldriver_::receive_bytes {num} {
   variable fp_p2t
   variable recv_data
 
@@ -103,7 +110,7 @@ proc receive_bytes {num} {
   return $result
 }
 
-proc receive {} {
+proc ::private_pytcldriver_::receive {} {
   set data_len [receive_bytes 16]
   set data_len [encoding convertfrom utf-8 $data_len]
   set data_len [scan $data_len %x]
@@ -111,7 +118,7 @@ proc receive {} {
   return [decrypt $data]
 }
 
-proc encrypt {data} {
+proc ::private_pytcldriver_::encrypt {data} {
   variable aes_key
 
   set data [encoding convertto utf-8 $data]
@@ -130,7 +137,7 @@ proc encrypt {data} {
   return $data
 }
 
-proc decrypt {data} {
+proc ::private_pytcldriver_::decrypt {data} {
   variable aes_key
 
   set data [::base64::decode $data]
@@ -147,36 +154,34 @@ proc decrypt {data} {
   return $data
 }
 
-proc close_connection {} {
+proc ::private_pytcldriver_::close_connection {} {
   variable socket_inst
   close $socket_inst
 }
 
-proc register_function {name idx} {
+proc ::private_pytcldriver_::register_function {name idx} {
   proc $name {args} "
-    send \"call $idx \$args\";
-    communicate
+    ::private_pytcldriver_::send \"call $idx \$args\";
+    ::private_pytcldriver_::communicate
   "
 }
 
-rename ::exit exit_
+rename ::exit ::private_pytcldriver_::exit_
 
 proc ::exit {{retval 0}} {
-  variable fp_p2t
-  variable fp_t2p
-  send "exit $retval"
+  ::private_pytcldriver_::send "exit $retval"
 
-  if {$fp_p2t != $fp_t2p} {
-    close $fp_p2t
-    close $fp_t2p
+  if {$::private_pytcldriver_::fp_p2t != $::private_pytcldriver_::fp_t2p} {
+    close $::private_pytcldriver_::fp_p2t
+    close $::private_pytcldriver_::fp_t2p
   } else {
-    close $fp_t2p
+    close $::private_pytcldriver_::fp_t2p
   }
 
-  exit_ $retval
+  ::private_pytcldriver_::exit_ $retval
 }
 
-proc communicate {} {
+proc ::private_pytcldriver_::communicate {} {
   variable comm_stack
   incr comm_stack 1
 
