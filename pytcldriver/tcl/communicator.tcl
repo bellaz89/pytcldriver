@@ -3,14 +3,21 @@ variable socket_inst ""
 variable aes_key ""
 variable prng ""
 variable recv_data ""
-variable aes_blocksize 16
 variable comm_stack 0
 
 set script_dir [file dirname $::argv0]
 source [file join $script_dir dict.tcl]
+source [file join $script_dir mt19937.tcl]
 
 if {[catch {package require base64} err]} {
   set dir [file join $script_dir base64]
+  source [file join $dir pkgIndex.tcl]
+  package require base64
+  unset dir
+}
+
+if {[catch {package require aes} err]} {
+  set dir [file join $script_dir aes]
   source [file join $dir pkgIndex.tcl]
   package require base64
   unset dir
@@ -20,6 +27,37 @@ unset script_dir
 
 proc init {params} {
   variable socket_port [lindex $params 0]
+  if {[llength $params] > 1} {
+     variable aes_key [binary format H* [lindex $params 1]]
+     mt::seed "0x[lindex $params 2]"
+  }
+}
+
+proc new_iv {} {
+  set result ""
+  append result [binary format I [mt::int32]]
+  append result [binary format I [mt::int32]]
+  append result [binary format I [mt::int32]]
+  append result [binary format I [mt::int32]]
+
+  return $result
+}
+
+proc pad_extend {pad} {
+  set ext ""
+  set N [expr $pad / 4]
+
+  for {set i 0} {$i < $N} {incr i} {
+    append ext [binary format I [mt::int32]]
+  }
+
+  set N [expr $pad % 4]
+
+  for {set i 0} {$i < $N } {incr i} {
+    append ext [binary format c [expr [mt::int32] % 0xff]]
+  }
+
+  return $ext
 }
 
 proc open_connection {} {
@@ -66,14 +104,38 @@ proc receive {} {
 }
 
 proc encrypt {data} {
+  variable aes_key
+
   set data [encoding convertto utf-8 $data]
+
+  if {$aes_key != ""} {
+    set iv [new_iv]
+    set pad [expr 16 - ([string bytelength $data] % 16)]
+    append data [pad_extend $pad]
+    set pad [binary format c $pad]
+    set data [::aes::aes -mode cbc -dir encrypt -key $aes_key -iv $iv $data]
+    set data "$pad$iv$data"
+  }
+
   set data [::base64::encode -wrapchar "" $data]
+
   return $data
 }
 
 proc decrypt {data} {
+  variable aes_key
+
   set data [::base64::decode $data]
+
+  if {$aes_key != ""} {
+    binary scan ca16a* $data pad iv data
+    set data [::aes::aes -mode cbc -dir decrypt -key $aes_key -iv $iv $data]
+    set format_string "a[expr [string bytelength $data] - $pad]a$pad"
+    binary scan $format_string $pad data pad
+  }
+
   set data [encoding convertfrom utf-8 $data]
+
   return $data
 }
 

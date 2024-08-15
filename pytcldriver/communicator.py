@@ -1,6 +1,8 @@
 import socket
 from subprocess import Popen, PIPE
 from base64 import b64encode, b64decode
+from Crypto.Cipher import AES
+from Crypto.Random import get_random_bytes
 import atexit
 import shlex
 from .tcl import TCL_MAIN_PATH
@@ -10,13 +12,19 @@ PACKET_SIZE=1024
 POPEN_CLOSE_TIMEOUT=5.0
 
 class Communicator(object):
-    def __init__(self, command, env=None, redirect_stdout=False, port=None):
+    def __init__(self, command, env=None, redirect_stdout=False, port=None,
+                 encrypt_data=True):
 
         self.fragment = bytes()
         self.process = None
         self.stdout = ""
         self.stderr = ""
         self.socket = None
+
+        if encrypt_data:
+            self.aes_key = get_random_bytes(16)
+        else:
+            self.aes_key = None
 
         self.command = command
         self.env = env
@@ -28,7 +36,6 @@ class Communicator(object):
         self.fragment = bytes()
         self.stdout = ""
         self.stderr = ""
-
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
         if self.port == None:
@@ -48,6 +55,11 @@ class Communicator(object):
         self.socket.listen(1)
         port = self.socket.getsockname()[1]
         tcl_args = str(port)
+
+        if self.aes_key:
+            tcl_args += " " + self.aes_key.hex()
+            tcl_args += " " + get_random_bytes(16).hex()
+
         args = shlex.split(self.command.format(script=TCL_MAIN_PATH,
                                                tcl_args=tcl_args))
 
@@ -87,11 +99,30 @@ class Communicator(object):
 
     def encrypt(self, message):
         data = message.encode()
+
+        if self.aes_key:
+            iv = get_random_bytes(16)
+            cipher = AES.new(self.aes_key, AES.MODE_CBC, iv)
+            pad = 16 - (len(data) % 16)
+            data += get_random_bytes(pad)
+            data = pad.to_bytes(1, "big") + cipher.iv + cipher.encrypt(data)
+
         data = b64encode(data)
         return data
 
     def decrypt(self, data):
         data = b64decode(data)
+
+        if self.aes_key:
+            pad = int.from_bytes(data[0], "big")
+            iv = data[1:5]
+            data = data[5:]
+            cipher = AES.new(self.aes_key, AES.MODE_CBC, iv)
+            data = cipher.decrypt(data)
+
+            if pad > 0:
+                data = data[:-pad]
+
         data = data.decode("utf-8")
         return data
 
