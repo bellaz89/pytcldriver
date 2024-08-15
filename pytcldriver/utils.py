@@ -24,12 +24,12 @@ import tkinter
 from tkinter import _magic_re, _space_re
 from importlib_resources import files
 
+# For older versions of TCL
 TKINTER = tkinter.Tcl()
-TKINTER.eval(files("pytcldriver.tcl").joinpath("dict.tcl").read_text()) # For older versions of TCL
+TKINTER.eval(files("pytcldriver.tcl").joinpath("dict.tcl").read_text())
 
 # Needed modified join and stringify from tkinter
 ##########################################################
-
 def join(value):
     return ' '.join(map(stringify, value))
 
@@ -75,11 +75,11 @@ def _bool(value):
 
 def array_create(interp, name, dictionary):
     if len(dictionary) == 0:
-        interp.array_set(name, "0", "0")
-        interp.array_unset(name, "0")
+        array_set(interp, name, "0", "0")
+        array_unset(interp, name, "0")
     else:
         for key, value in dictionary.items():
-            interp.array_set(name, stringify(key), stringify(value))
+            array_set(interp, name, stringify(key), stringify(value))
 
 def array_exists(interp, name):
     return _bool(interp._eval("array exists " + stringify(name)))

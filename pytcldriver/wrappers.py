@@ -543,7 +543,7 @@ class ArrayWrapper(PublicProperties, MutableMapping):
         return iter(self.get())
 
     def get(self):
-        return to_dict(self.array_to_dict(self.address))
+        return to_dict(array_to_dict(self.interpreter, self.address))
 
     def set(self, value):
         if variable_exists(self.interpreter, self.address):
