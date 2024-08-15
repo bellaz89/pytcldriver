@@ -32,6 +32,6 @@ pytcldriver = ["*.tcl"]
 [project.urls]
 # Homepage = ""
 # Documentation = ""
-# Repository = ""
+Repository = "https://github.com/bellaz89/pytcldriver"
 # Issues = ""
 # Changelog = ""
