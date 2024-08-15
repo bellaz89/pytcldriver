@@ -12,7 +12,7 @@ PACKET_SIZE=1024
 POPEN_CLOSE_TIMEOUT=5.0
 
 class Communicator(object):
-    def __init__(self, command, env=None, redirect_stdout=False, port=None,
+    def __init__(self, command, env=None, redirect_stdout=True, port=None,
                  encrypt_data=True):
 
         self.fragment = bytes()
@@ -58,7 +58,7 @@ class Communicator(object):
 
         if self.aes_key:
             tcl_args += " " + self.aes_key.hex()
-            tcl_args += " " + get_random_bytes(16).hex()
+            tcl_args += " " + get_random_bytes(8).hex()
 
         args = shlex.split(self.command.format(script=TCL_MAIN_PATH,
                                                tcl_args=tcl_args))
@@ -104,7 +104,9 @@ class Communicator(object):
             iv = get_random_bytes(16)
             cipher = AES.new(self.aes_key, AES.MODE_CBC, iv)
             pad = 16 - (len(data) % 16)
-            data += get_random_bytes(pad)
+            pad_ext = get_random_bytes(pad)
+            pad_ext = bytes([48 + b % 64 for b in pad_ext])
+            data += pad_ext
             data = pad.to_bytes(1, "big") + cipher.iv + cipher.encrypt(data)
 
         data = b64encode(data)
@@ -114,9 +116,9 @@ class Communicator(object):
         data = b64decode(data)
 
         if self.aes_key:
-            pad = int.from_bytes(data[0], "big")
-            iv = data[1:5]
-            data = data[5:]
+            pad = data[0]
+            iv = data[1:17]
+            data = data[17:]
             cipher = AES.new(self.aes_key, AES.MODE_CBC, iv)
             data = cipher.decrypt(data)
 

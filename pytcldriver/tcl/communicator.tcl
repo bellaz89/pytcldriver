@@ -19,7 +19,7 @@ if {[catch {package require base64} err]} {
 if {[catch {package require aes} err]} {
   set dir [file join $script_dir aes]
   source [file join $dir pkgIndex.tcl]
-  package require base64
+  package require aes
   unset dir
 }
 
@@ -39,7 +39,6 @@ proc new_iv {} {
   append result [binary format I [mt::int32]]
   append result [binary format I [mt::int32]]
   append result [binary format I [mt::int32]]
-
   return $result
 }
 
@@ -113,7 +112,7 @@ proc encrypt {data} {
     set pad [expr 16 - ([string bytelength $data] % 16)]
     append data [pad_extend $pad]
     set pad [binary format c $pad]
-    set data [::aes::aes -mode cbc -dir encrypt -key $aes_key -iv $iv $data]
+    set data [::aes::aes -mode cbc -dir encrypt -key $aes_key -iv $iv -- $data]
     set data "$pad$iv$data"
   }
 
@@ -128,10 +127,10 @@ proc decrypt {data} {
   set data [::base64::decode $data]
 
   if {$aes_key != ""} {
-    binary scan ca16a* $data pad iv data
-    set data [::aes::aes -mode cbc -dir decrypt -key $aes_key -iv $iv $data]
+    binary scan $data ca16a* pad iv data
+    set data [::aes::aes -mode cbc -dir decrypt -key $aes_key -iv $iv -- $data]
     set format_string "a[expr [string bytelength $data] - $pad]a$pad"
-    binary scan $format_string $pad data pad
+    binary scan $data $format_string data pad
   }
 
   set data [encoding convertfrom utf-8 $data]

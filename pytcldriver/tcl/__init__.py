@@ -12,6 +12,7 @@ TCL_SOURCES_BASE64_DIRECTORY = os.path.join(TCL_SOURCES_DIRECTORY, "base64")
 TCL_SOURCES_AES_DIRECTORY = os.path.join(TCL_SOURCES_DIRECTORY, "aes")
 
 os.mkdir(TCL_SOURCES_BASE64_DIRECTORY)
+os.mkdir(TCL_SOURCES_AES_DIRECTORY)
 
 RESOURCE_PATH = files("pytcldriver.tcl")
 RESOURCE_MAIN = RESOURCE_PATH.joinpath("main.tcl")
@@ -28,7 +29,7 @@ for name in ["pkgIndex.tcl", "base64.tcl", "base64c.tcl"]:
     with open(os.path.join(TCL_SOURCES_BASE64_DIRECTORY, name), "w") as f:
         f.write(RESOURCE_BASE64_PATH.joinpath(name).read_text())
 
-RESOURCE_AES_PATH = files("pytcldriver.tcl.base64")
+RESOURCE_AES_PATH = files("pytcldriver.tcl.aes")
 
 for name in ["pkgIndex.tcl", "aes.tcl"]:
     with open(os.path.join(TCL_SOURCES_AES_DIRECTORY, name), "w") as f:
