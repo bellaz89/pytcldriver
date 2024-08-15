@@ -6,13 +6,14 @@ from Crypto.Random import get_random_bytes
 import atexit
 import shlex
 from .tcl import ResourcesDirectory
+import os
 
 PACKET_SIZE=1024
 POPEN_CLOSE_TIMEOUT=5.0
 
 class Communicator(object):
     def __init__(self, command, env=None, redirect_stdout=True, port=None,
-                 encrypt_data=True):
+                 encrypt_data=True, args_passing="file"):
 
         self.fragment = bytes()
         self.process = None
@@ -20,16 +21,14 @@ class Communicator(object):
         self.stderr = ""
         self.socket = None
         self.resources = None
-
-        if encrypt_data:
-            self.aes_key = get_random_bytes(16)
-        else:
-            self.aes_key = None
+        self.aes_key = None
 
         self.command = command
         self.env = env
         self.redirect_stdout = redirect_stdout
         self.port = port
+        self.encrypt_data = encrypt_data
+        self.args_passing = args_passing
 
     def open(self):
         atexit.register(self.close)
@@ -37,6 +36,11 @@ class Communicator(object):
         self.stdout = ""
         self.stderr = ""
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+        if self.encrypt_data:
+            self.aes_key = get_random_bytes(16)
+        else:
+            self.aes_key = None
 
         if self.port == None:
             self.socket.bind(('', 0))
@@ -56,13 +60,26 @@ class Communicator(object):
         port = self.socket.getsockname()[1]
         tcl_args = str(port)
 
-        if self.aes_key:
+        if self.encrypt_data:
             tcl_args += " " + self.aes_key.hex()
             tcl_args += " " + get_random_bytes(8).hex()
 
         self.resources = ResourcesDirectory()
-        args = shlex.split(self.command.format(script=self.resources.main_path,
-                                               tcl_args=tcl_args))
+
+        if self.args_passing == "shell":
+            args = shlex.split(self.command.format(script=self.resources.main_shell_path,
+                                                   tcl_args=tcl_args))
+        elif self.args_passing == "file":
+            args = shlex.split(self.command.format(script=self.resources.main_file_path,
+                                                   tcl_args=""))
+
+            with open(os.path.join(self.resources.resources_path,
+                                   "args"), 'w') as f:
+                f.write(tcl_args + "\n")
+        else:
+            self.close()
+            raise Exception("Unknown argument passing style. " \
+                            "Choose either 'file' or 'shell'")
 
         if self.redirect_stdout:
             self.process = Popen(args,
@@ -101,7 +118,7 @@ class Communicator(object):
     def encrypt(self, message):
         data = message.encode()
 
-        if self.aes_key:
+        if self.encrypt_data:
             iv = get_random_bytes(16)
             cipher = AES.new(self.aes_key, AES.MODE_CBC, iv)
             pad = 16 - (len(data) % 16)
@@ -116,7 +133,7 @@ class Communicator(object):
     def decrypt(self, data):
         data = b64decode(data)
 
-        if self.aes_key:
+        if self.encrypt_data:
             pad = data[0]
             iv = data[1:17]
             data = data[17:]
@@ -150,20 +167,19 @@ class Communicator(object):
         except:
             pass
 
-        self.socket = None
-
         try:
             self.resources.close()
         except:
             pass
 
-        if self.redirect_stdout:
-            self.stdout = self.process.stdout.read().decode("utf-8")
-            self.stderr = self.process.stderr.read().decode("utf-8")
-        else:
-            self.stdout = ""
-            self.stderr = ""
+        self.stdout = ""
+        self.stderr = ""
 
-        self.process = None
+        if self.redirect_stdout:
+            try:
+                    self.stdout = self.process.stdout.read().decode("utf-8")
+                    self.stderr = self.process.stderr.read().decode("utf-8")
+            except:
+                pass
 
         atexit.unregister(self.close)

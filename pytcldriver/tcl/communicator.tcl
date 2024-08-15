@@ -5,7 +5,6 @@ variable prng ""
 variable recv_data ""
 variable comm_stack 0
 
-set script_dir [file dirname $::argv0]
 source [file join $script_dir dict.tcl]
 source [file join $script_dir mt19937.tcl]
 
@@ -22,8 +21,6 @@ if {[catch {package require aes} err]} {
   package require aes
   unset dir
 }
-
-unset script_dir
 
 proc init {params} {
   variable socket_port [lindex $params 0]

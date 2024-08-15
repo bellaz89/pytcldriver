@@ -18,7 +18,9 @@ class ResourcesDirectory(object):
 
         resource_path = files("pytcldriver.tcl")
 
-        for name in ["main.tcl", "communicator.tcl", "dict.tcl", "mt19937.tcl"]:
+        for name in ["main_shell.tcl", "main_file.tcl", "communicator.tcl",
+                     "dict.tcl", "mt19937.tcl"]:
+
             with open(os.path.join(tcl_sources_directory, name), "w") as f:
                 f.write(resource_path.joinpath(name).read_text())
 
@@ -35,7 +37,8 @@ class ResourcesDirectory(object):
                 f.write(resource_aes_path.joinpath(name).read_text())
 
         self.resources_path = self.directory.name
-        self.main_path = os.path.join(tcl_sources_directory, "main.tcl")
+        self.main_shell_path = os.path.join(tcl_sources_directory, "main_shell.tcl")
+        self.main_file_path = os.path.join(tcl_sources_directory, "main_file.tcl")
 
     def close(self):
         self.directory.cleanup()
