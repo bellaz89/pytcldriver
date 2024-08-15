@@ -29,10 +29,10 @@ namespace eval ::private_pytcldriver_ {
   variable recv_data ""
   variable comm_stack 0
   variable script_dir [file dirname $::argv0]
+  source [file join $script_dir mt19937.tcl]
 }
 
 source [file join $script_dir dict.tcl]
-source [file join $script_dir mt19937.tcl]
 
 if {[catch {package require base64} err]} {
   set dir [file join $::private_pytcldriver_::script_dir base64]
