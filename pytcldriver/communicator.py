@@ -5,9 +5,8 @@ from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
 import atexit
 import shlex
-from .tcl import TCL_MAIN_PATH
+from .tcl import ResourcesDirectory
 
-RANDOM_SIZE=16
 PACKET_SIZE=1024
 POPEN_CLOSE_TIMEOUT=5.0
 
@@ -20,6 +19,7 @@ class Communicator(object):
         self.stdout = ""
         self.stderr = ""
         self.socket = None
+        self.resources = None
 
         if encrypt_data:
             self.aes_key = get_random_bytes(16)
@@ -60,7 +60,8 @@ class Communicator(object):
             tcl_args += " " + self.aes_key.hex()
             tcl_args += " " + get_random_bytes(8).hex()
 
-        args = shlex.split(self.command.format(script=TCL_MAIN_PATH,
+        self.resources = ResourcesDirectory()
+        args = shlex.split(self.command.format(script=self.resources.main_path,
                                                tcl_args=tcl_args))
 
         if self.redirect_stdout:
@@ -150,6 +151,11 @@ class Communicator(object):
             pass
 
         self.socket = None
+
+        try:
+            self.resources.close()
+        except:
+            pass
 
         if self.redirect_stdout:
             self.stdout = self.process.stdout.read().decode("utf-8")

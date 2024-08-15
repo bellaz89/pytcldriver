@@ -1,9 +1,9 @@
 import tkinter
 from tkinter import _magic_re, _space_re
-from .tcl import TCL_DICT_PATH
+from importlib_resources import files
 
 TKINTER = tkinter.Tcl()
-TKINTER.call("source", TCL_DICT_PATH) # For older versions of TCL
+TKINTER.eval(files("pytcldriver.tcl").joinpath("dict.tcl").read_text()) # For older versions of TCL
 
 # Needed modified join and stringify from tkinter
 ##########################################################
