@@ -109,17 +109,17 @@ class NamespaceWrapper(Addressable):
         (interpreter, ns_address) = self.__private()
         address = ns_address + "::" + stringify(name)
 
-        if namespace_exists(interpreter, address):
-            return NamespaceWrapper(interpreter, address)
-
-        elif function_exists(interpreter, address):
+        if function_exists(interpreter, address):
             return FunctionWrapper(interpreter, address)
+
+        elif variable_exists(interpreter, address):
+            return StringWrapper(interpreter, address)
 
         elif array_exists(interpreter, address):
             return ArrayWrapper(interpreter, address)
 
-        elif variable_exists(interpreter, address):
-            return StringWrapper(interpreter, address)
+        elif namespace_exists(interpreter, address):
+            return NamespaceWrapper(interpreter, address)
 
         else:
             raise NameError(("name '{}' is not defined " +
