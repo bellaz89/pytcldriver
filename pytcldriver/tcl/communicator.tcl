@@ -184,7 +184,10 @@ proc ::private_pytcldriver_::close_connection {} {
 
 proc ::private_pytcldriver_::register_function {name idx} {
   proc $name {args} "
-    ::private_pytcldriver_::send \"call $idx \$args\";
+    set fun_name \[lindex \[info level 0\] 0\];
+    set ns_caller \[uplevel {namespace current}\];
+    set data \[linsert \$args 0 \$fun_name \$ns_caller \];
+    ::private_pytcldriver_::send \"call $idx \$data\";
     ::private_pytcldriver_::communicate
   "
 }
@@ -215,7 +218,7 @@ proc ::private_pytcldriver_::communicate {} {
       incr comm_stack -1
       uplevel $data
     } elseif {[catch {set result [uplevel $data]} err]} {
-      send "error $err"
+      send "error \{$err\}"
     } else {
       send "return $result"
     }

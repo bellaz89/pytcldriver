@@ -94,8 +94,8 @@ class NamespaceWrapper(Addressable):
                 self.__dict__["__private_address"])
 
     def __call__(self, arg, *args):
-        (interpreter, address) = self.__private()
-        return ReturnStringWrapper(namespace_eval(interpreter, address, arg, *args))
+        (interpreter, ns_address) = self.__private()
+        return ReturnStringWrapper(namespace_eval(interpreter, ns_address, arg, *args))
 
     def __dir__(self):
         (interpreter, _) = self.__private()
@@ -132,7 +132,7 @@ class NamespaceWrapper(Addressable):
         address = ns_address + "::" + stringify(name)
         interpreter = interpreter
 
-        from pytcldriver import Namespace, Array
+        from pytcldriver import Namespace, Array, Function
         if isinstance(value, Namespace):
             _del_nothrow(self, name)
             namespace_create(interpreter, address)
@@ -140,7 +140,7 @@ class NamespaceWrapper(Addressable):
             for key, val in value.items():
                 ns[key] = value[key]
 
-        if isinstance(value, NamespaceWrapper):
+        elif isinstance(value, NamespaceWrapper):
             _del_nothrow(self, name)
             namespace_create(interpreter, address)
             ns = self[name]
@@ -159,19 +159,21 @@ class NamespaceWrapper(Addressable):
             for key, val in value.items():
                 arr[key] = val
 
-        elif callable(value):
+        elif isinstance(value, Function):
             _del_nothrow(self, name)
             interpreter.register_fun(address, value)
+
+        elif callable(value):
+            _del_nothrow(self, name)
+            interpreter.register_fun(address, Function(value, True))
 
         else:
             _del_nothrow(self, name)
             interpreter.set(address, value)
 
-
     def __delitem__(self, name):
         (interpreter, ns_address) = self.__private()
         address = ns_address + "::" + stringify(name)
-        interpreter = self.interpreter
 
         if namespace_exists(interpreter, address):
             namespace_delete(interpreter, address)
@@ -200,9 +202,6 @@ class NamespaceWrapper(Addressable):
 
     def __delattr__(self, name):
         del self[name]
-
-    def __call__(self, command):
-        pass
 
 
 def parent(ns):
@@ -250,7 +249,6 @@ class PublicProperties(Addressable):
         from pytcldriver import Namespace
         return Namespace(self.interpreter,
                          qualifiers(self.address))
-
 
 
 class FunctionWrapper(PublicProperties):

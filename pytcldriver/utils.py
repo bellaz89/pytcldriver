@@ -35,21 +35,33 @@ def join(value):
 
 def stringify(value):
     from pytcldriver.wrappers import ArrayWrapper
+    from pytcldriver.wrappers import ListWrapper, DictionaryWrapper
+
+    if value is None:
+        value = []
 
     if isinstance(value, bool):
         value = int(value)
 
-    if isinstance(value, (list, tuple, ArrayWrapper)):
-        if len(value) == 1:
+    if isinstance(value, (list, tuple, ArrayWrapper, ListWrapper)):
+        if len(value) == 0:
+            value = '{}'
+        elif len(value) == 1:
             value = stringify(value[0])
             if _magic_re.search(value):
                 value = '{%s}' % value
         else:
             value = '{%s}' % join(value)
-    elif isinstance(value, dict):
-        value = '{%s}' % join([x for xs in value.items() for x in xs])
+
+    elif isinstance(value, (dict, DictionaryWrapper)):
+        if len(value) == 0:
+            value = '{}'
+        else:
+            value = '{%s}' % join([x for xs in value.items() for x in xs])
+
     elif isinstance(value, complex):
         value = '{%s}' % join([value.real, value.imag])
+
     else:
         if isinstance(value, bytes):
             value = str(value, 'latin1')
@@ -66,6 +78,7 @@ def stringify(value):
                 value = '\\' + value
         elif value[0] == '"' or _space_re.search(value):
             value = '{%s}' % value
+
     return value
 
 ##########################################################
@@ -203,10 +216,10 @@ def list_set(list_, index, value):
                         stringify(index) + " " +
                         stringify(value))
 
-def list_range(list_, start, end):
+def list_range(list_, begin, end):
     return TKINTER.eval("lrange" + " " +
                         stringify(list_) + " " +
-                        stringify(start) + " " +
+                        stringify(begin) + " " +
                         stringify(end))
 
 def list_size(list_):
@@ -236,10 +249,11 @@ def namespace_delete(interp, *namespaces):
     interp.eval("namespace delete " + join(namespaces))
 
 def _namespace_eval(interp, namespace, fun):
-    return interp._eval("namespace eval " + fun_str)
+    return interp._eval("namespace eval " + namespace + " " + fun)
 
 def namespace_eval(interp, namespace, fun, *args):
-    return interp.eval("namespace eval " + join([fun] + list(args)))
+    return interp.eval("namespace eval " + namespace + " " +
+                       join([fun] + list(args)))
 
 def namespace_exists(interp, namespace):
     return _bool(interp._eval("namespace exists " + stringify(namespace)))

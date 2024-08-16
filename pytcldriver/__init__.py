@@ -27,7 +27,7 @@ import atexit
 
 from .communicator import Communicator
 from .wrappers import NamespaceWrapper, ReturnStringWrapper
-from .utils import join, stringify, list_get, list_range, list_size
+from .utils import join, stringify, list_get, list_range, list_size, to_list
 
 class Interpreter:
     MAX_MSG_SIZE=16384
@@ -84,18 +84,16 @@ class Interpreter:
                                    "executing .eval(\"" + fun + "\")")
 
             elif code == "error":
+                args = list_get(args, 0)
                 raise RuntimeError("While executing .eval(\"" + fun + "\"): " +
                                    args)
 
             elif code == "call":
                 [fun_id, args] = args.split(" ", 1)
-                args = [list_get(args, i)
-                        for i
-                        in range(list_size(args))]
-
+                args = to_list(args)
                 retval = None
                 try:
-                    retval = self.registered_fun[int(fun_id)](*args)
+                    retval = self.registered_fun[int(fun_id)](self, *args)
                     retval = stringify(retval)
                     self.communicator.send("return " + retval)
                 except Exception as err:
@@ -126,7 +124,7 @@ class Interpreter:
         return self._eval("pwd")
 
     def set(self, name, value=None):
-        if value:
+        if value is not None:
             return self.eval("set", name, value)
         else:
             return self._eval("set " + name)
@@ -173,3 +171,14 @@ class Namespace(dict):
 
 class Array(dict):
     pass
+
+class Function(object):
+    def __init__(self, fun, reduced=False):
+        if reduced:
+            self.fun = lambda interp, fun_name, ns_caller, *args : fun(*args)
+        else:
+            self.fun = fun
+
+    def __call__(self, interp, fun_name, ns_caller, *args):
+        return self.fun(interp, fun_name, ns_caller, *args)
+
